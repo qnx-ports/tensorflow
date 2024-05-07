@@ -35,7 +35,7 @@ if(${CMAKE_CROSSCOMPILING})
       ${TFLITE_HOST_TOOLS_DIR}/bin
       ${TFLITE_HOST_TOOLS_DIR}/flatbuffers-flatc/bin
       )
-  find_program(FLATC_BIN flatc PATHS ${FLATC_PATHS})
+  find_program(FLATC_BIN flatc PATHS ${FLATC_PATHS} NO_DEFAULT_PATH)
   if(${FLATC_BIN} STREQUAL "FLATC_BIN-NOTFOUND")
     message(FATAL_ERROR "Natively compiled 'flatc' compiler has not been found in the following\
     locations: ${FLATC_PATHS}")
@@ -167,6 +167,13 @@ macro(add_kernel_test TEST_SRC TEST_LIB)
   add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME}
     WORKING_DIRECTORY ${TENSORFLOW_SOURCE_DIR}
   )
+
+  if(QNX)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME}
+      DESTINATION ${CMAKE_INSTALL_BINDIR}/kernel_tests
+    )
+  endif()
+
   set_tests_properties(${TEST_NAME} PROPERTIES LABELS "plain")
 
   if(_TFLITE_ENABLE_NNAPI OR TFLITE_ENABLE_EXTERNAL_DELEGATE OR TFLITE_ENABLE_XNNPACK)
@@ -245,7 +252,6 @@ set(TEST_WITH_EXTERNAL_MAIN_LIST
   gather_test.cc
   hashtable_lookup_test.cc
   hashtable_ops_test.cc
-  if_test.cc
   l2norm_test.cc
   local_response_norm_test.cc
   log_softmax_test.cc
@@ -311,9 +317,13 @@ set(TEST_WITH_EXTERNAL_MAIN_LIST
   unpack_test.cc
   variable_ops_test.cc
   where_test.cc
-  while_test.cc
   zeros_like_test.cc
 )
+
+if(TFLITE_ENABLE_XNNPACK)
+  list(APPEND TEST_WITH_EXTERNAL_MAIN_LIST if_test.cc while_test.cc)
+endif()
+
 # Tests where the main() provided by the GoogleTest framework
 set(TEST_WITH_GTEST_MAIN_LIST
   cpu_backend_gemm_test.cc
@@ -339,5 +349,12 @@ if(${CMAKE_CROSSCOMPILING})
     ${TFLITE_SOURCE_DIR}/tools/cmake/test_utils/run-tests.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/run-tests.cmake
     COPYONLY
+  )
+endif()
+
+
+if(QNX)
+  install(TARGETS tensorflow-lite-test-external-main tensorflow-lite-test-base
+    DESTINATION ${CMAKE_INSTALL_BINDIR}/kernel_tests_libs
   )
 endif()

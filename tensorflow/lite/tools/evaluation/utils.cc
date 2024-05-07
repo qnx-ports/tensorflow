@@ -90,8 +90,32 @@ TfLiteStatus GetSortedFileNames(
   result->clear();
   std::string dir_path = StripTrailingSlashes(directory);
   if ((dir = opendir(dir_path.c_str())) != nullptr) {
+#if defined(__QNX__)
+    // Turn on stat info in the dirent.
+    int dirflags;
+    if ( (dirflags = dircntl(dir, D_GETFLAG)) == -1 ) {
+        return kTfLiteError;
+    } else if (dircntl(dir, D_SETFLAG, dirflags | D_FLAG_STAT) == -1) {
+        return kTfLiteError;
+    }
+
+    while ((ent = readdir(dir)) != nullptr) {
+      // Get the dirent stat
+      struct dirent_extra *dex;
+      struct dirent_extra_stat *dex_stat;
+      bool is_dir = false;
+      for ( dex = _DEXTRA_FIRST(ent); _DEXTRA_VALID(dex, ent);
+          dex = _DEXTRA_NEXT(dex) ) {
+          if ( dex->d_type == _DTYPE_STAT || dex->d_type == _DTYPE_LSTAT ) {
+              dex_stat = (struct dirent_extra_stat *) dex;
+              if (S_ISDIR(dex_stat->d_stat.st_mode)) is_dir = true;
+          }
+      }
+      if (is_dir) continue;
+#else
     while ((ent = readdir(dir)) != nullptr) {
       if (ent->d_type == DT_DIR) continue;
+#endif
       std::string filename(std::string(ent->d_name));
       size_t lastdot = filename.find_last_of('.');
       std::string ext = lastdot != std::string::npos ? filename.substr(lastdot)
