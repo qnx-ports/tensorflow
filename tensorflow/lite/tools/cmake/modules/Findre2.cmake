@@ -22,7 +22,7 @@ include(OverridableFetchContent)
 OverridableFetchContent_Declare(
   re2
   GIT_REPOSITORY https://github.com/google/re2.git
-  GIT_TAG 2021-02-02
+  GIT_TAG 2023-11-01
   GIT_SHALLOW TRUE
   GIT_PROGRESS TRUE
   SOURCE_DIR "${CMAKE_BINARY_DIR}/re2"
