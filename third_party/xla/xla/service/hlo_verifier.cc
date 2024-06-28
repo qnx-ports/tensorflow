@@ -1985,9 +1985,10 @@ absl::Status ShapeVerifier::CheckShape(
   if (!equal) {
     return Internal(
         "Expected instruction to have shape equal to %s, actual "
-        "shape is %s:\n%s",
+        "shape is %s:\n%s\n%s\n%s",
         StringifyShape(inferred_shape), StringifyShape(instruction->shape()),
-        instruction->ToString());
+        instruction->ToString(), instruction->operand(0)->ToString(),
+        instruction->operand(1)->ToString());
   }
   return absl::OkStatus();
 }
