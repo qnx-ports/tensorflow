@@ -762,6 +762,9 @@ absl::StatusOr<bool> CommandBufferScheduling::Run(
   auto erase_cuda = [&](const se::CudaComputeCapability& cuda_comp) {
     if (std::min(gpu_toolkit_version_, gpu_driver_version_) < 12030) {
       erase(kRequireTracing);       // cuStreamBeginCaptureToGraph
+    }
+    if (std::min(gpu_toolkit_version_, gpu_driver_version_) < 12040) {
+      // Conditionals With Memsets require cuda 12.4.1.
       erase(kRequireConditionals);  // on-device control flow
     }
   };

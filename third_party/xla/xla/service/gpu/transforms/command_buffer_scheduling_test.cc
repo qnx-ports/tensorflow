@@ -38,8 +38,8 @@ namespace {
 
 class CommandBufferSchedulingTest : public HloTestBase {
  public:
-  // Use CUDA 12.3 version for testing as it has all the features we rely on.
-  static constexpr int32_t kCudaVersion = 12030;
+  // Use CUDA 12.4 version for testing as it has all the features we rely on.
+  static constexpr int32_t kCudaVersion = 12040;
 
   const se::DeviceDescription& device_desc() {
     return backend().default_stream_executor()->GetDeviceDescription();
