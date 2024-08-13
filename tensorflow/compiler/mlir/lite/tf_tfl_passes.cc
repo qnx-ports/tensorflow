@@ -17,8 +17,10 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "base/casts.h"
 #include "llvm/ADT/StringRef.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/Pass/Pass.h"  // from @llvm-project
@@ -31,8 +33,9 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/lite/stablehlo/transforms/legalize_tf_xla_call_module_to_stablehlo_pass.h"
 #include "tensorflow/compiler/mlir/lite/stablehlo/transforms/passes.h"
 #include "tensorflow/compiler/mlir/lite/stablehlo/transforms/transforms.h"
-#include "tensorflow/compiler/mlir/lite/transforms/optimize_pass_options.h"
+#include "tensorflow/compiler/mlir/lite/transforms/optimize_pass.h"
 #include "tensorflow/compiler/mlir/lite/transforms/passes.h"
+#include "tensorflow/compiler/mlir/lite/transforms/toco_pass_options_setter.h"
 #include "tensorflow/compiler/mlir/lite/utils/fake_quant_utils.h"
 #include "tensorflow/compiler/mlir/quantization/common/quantization_lib/quantization_config.h"
 #include "tensorflow/compiler/mlir/tensorflow/transforms/passes.h"
@@ -511,9 +514,8 @@ void AddPostVariableFreezingTFToTFLConversionPasses(
     pass_manager->addPass(mlir::TFL::CreateLegalizeVariablesPass());
     pass_manager->addPass(mlir::TFL::CreateLegalizeHashTablesPass());
 
-    mlir::TFL::OptimizePassOptions optimize_pass_options;
-    optimize_pass_options.disable_fuse_mul_and_fc =
-        toco_flags.disable_fuse_mul_and_fc();
+    mlir::TFL::TocoPassOptionsSetter toco_pass_options_setter(toco_flags,
+                                                              pass_config);
 
     auto add_tfl_optimization_passes = [&]() {
       if (!pass_config.unfold_batch_matmul) {
@@ -525,8 +527,11 @@ void AddPostVariableFreezingTFToTFLConversionPasses(
       pass_manager->addPass(mlir::TFL::CreatePushTransposeThroughEwisePass());
 
       // Add TFLite optimize pass.
-      pass_manager->addNestedPass<mlir::func::FuncOp>(
-          mlir::TFL::CreateOptimizePass(optimize_pass_options));
+      std::unique_ptr<mlir::OperationPass<mlir::func::FuncOp>> optimize_pass =
+          mlir::TFL::CreateOptimizePass();
+      ::down_cast<mlir::TFL::OptimizePass*>(optimize_pass.get())
+          ->ApplyOptionsVisitor(toco_pass_options_setter);
+      pass_manager->addNestedPass<mlir::func::FuncOp>(std::move(optimize_pass));
     };
 
     // Run TFL optimization passes set multiple times as op fusion and

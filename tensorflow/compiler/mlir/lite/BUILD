@@ -382,10 +382,36 @@ cc_library(
     compatible_with = get_compatible_with_portable(),
     visibility = ["//visibility:public"],
     deps = [
+        ":pass_options_setter",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
+    ],
+)
+
+cc_library(
+    name = "pass_options_setter",
+    hdrs = ["transforms/pass_options_setter.h"],
+    compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
+    deps = [
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+cc_library(
+    name = "toco_pass_options_setter",
+    srcs = ["transforms/toco_pass_options_setter.cc"],
+    hdrs = ["transforms/toco_pass_options_setter.h"],
+    compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
+    deps = [
+        ":pass_options_setter",
+        "//tensorflow/compiler/mlir/lite:common",
+        "//tensorflow/compiler/mlir/lite:optimize_pass_options",
+        "//tensorflow/lite/toco:toco_flags_proto_cc",
+        "@llvm-project//llvm:Support",
     ],
 )
 
@@ -1534,17 +1560,16 @@ cc_library(
         "tf_tfl_passes.h",
     ],
     deps = [
-        ":canonicalize_boundary_value",
         ":common",
         ":fake_quant_utils",
-        ":optimize_pass_options",
-        ":pass",
         ":tensorflow_lite_d2s",  # buildcleaner: keep
         ":tensorflow_lite_legalize_tf",  # buildcleaner: keep
         ":tensorflow_lite_optimize",  # buildcleaner: keep
         ":tensorflow_lite_optimize_batch_matmul",  # buildcleaner: keep
         ":tensorflow_lite_push_transpose_through_ewise",  # buildcleaner: keep
         ":tensorflow_lite_quantize",  # buildcleaner: keep
+        ":toco_pass_options_setter",
+        "//base:casts",
         "//tensorflow/compiler/mlir/lite/quantization:quantization_passes",
         "//tensorflow/compiler/mlir/lite/quantization/tensorflow:tf_quantization_passes",
         "//tensorflow/compiler/mlir/lite/stablehlo:build_stablehlo_composite",
