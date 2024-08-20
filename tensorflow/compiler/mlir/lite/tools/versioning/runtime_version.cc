@@ -1,4 +1,4 @@
-/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,21 +12,22 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/tools/versioning/runtime_version.h"
+#include "tensorflow/compiler/mlir/lite/tools/versioning/runtime_version.h"
 
+#include <cstdint>
 #include <cstring>
 #include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "absl/log/log.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
 #include "tensorflow/compiler/mlir/lite/schema/mutable/schema_generated.h"
-#include "tensorflow/lite/minimal_logging.h"
-#include "tensorflow/lite/schema/schema_utils.h"
+#include "tensorflow/compiler/mlir/lite/schema/schema_utils.h"
 
-namespace tflite {
-
+namespace tflite_migration {
 bool CompareRuntimeVersion(const std::string& v1, const std::string& v2) {
   const std::vector<std::string> vec1 = absl::StrSplit(v1, '.');
   const std::vector<std::string> vec2 = absl::StrSplit(v2, '.');
@@ -46,6 +47,7 @@ bool CompareRuntimeVersion(const std::string& v1, const std::string& v2) {
 
 std::string FindMinimumRuntimeVersionForOp(tflite::BuiltinOperator op_code,
                                            int op_version) {
+  using namespace tflite;
   // LINT.IfChange
   // A map from the version key of an op to its minimum runtime version.
   // For example, {{kAveragePool, 1}, "1.5.0"},  means the 1st version of
@@ -449,7 +451,7 @@ std::string FindMinimumRuntimeVersionForOp(tflite::BuiltinOperator op_code,
            {{BuiltinOperator_STABLEHLO_MINIMUM, 1}, "2.16.0"},
            {{BuiltinOperator_STABLEHLO_PAD, 1}, "2.16.0"},
            {{BuiltinOperator_STABLEHLO_COMPOSITE, 1}, "2.17.0"}});
-  // LINT.ThenChange(//tensorflow/compiler/mlir/lite/tools/versioning/runtime_version.cc)
+  // LINT.ThenChange(//tensorflow/lite/tools/versioning/runtime_version.cc)
 
   std::pair<BuiltinOperator, int> version_key = {op_code, op_version};
   auto it = op_version_map->find(version_key);
@@ -460,14 +462,14 @@ std::string FindMinimumRuntimeVersionForOp(tflite::BuiltinOperator op_code,
 }
 
 void UpdateMinimumRuntimeVersionForModel(uint8_t* model_buffer_pointer) {
-  auto model = GetMutableModel(model_buffer_pointer);
+  auto model = tflite::GetMutableModel(model_buffer_pointer);
   std::string model_min_version;
   auto subgraphs = model->subgraphs();
-  for (int i = 0; i < subgraphs->Length(); ++i) {
-    const SubGraph* subgraph = subgraphs->Get(i);
-    for (int j = 0; j < subgraph->operators()->Length(); ++j) {
-      const Operator* op = subgraph->operators()->Get(j);
-      const OperatorCode* op_code =
+  for (int i = 0; i < subgraphs->size(); ++i) {
+    const tflite::SubGraph* subgraph = subgraphs->Get(i);
+    for (int j = 0; j < subgraph->operators()->size(); ++j) {
+      const tflite::Operator* op = subgraph->operators()->Get(j);
+      const tflite::OperatorCode* op_code =
           model->operator_codes()->Get(op->opcode_index());
       std::string runtime_version = FindMinimumRuntimeVersionForOp(
           GetBuiltinCode(op_code), op_code->version());
@@ -486,9 +488,8 @@ void UpdateMinimumRuntimeVersionForModel(uint8_t* model_buffer_pointer) {
   // generated `model_min_version` is equal or longer than 16 bytes, print a
   // warning message and return.
   if (model_min_version.size() >= 16) {
-    TFLITE_LOG(TFLITE_LOG_WARNING,
-               "Skip writing minimum runtime version string since it's "
-               "longer than 16 bytes.");
+    LOG(WARNING) << "Skip writing minimum runtime version string since it's "
+                 << "longer than 16 bytes.";
     return;
   }
   // Copy over the bytes from `model_min_version` into the buffer.
@@ -505,4 +506,4 @@ void UpdateMinimumRuntimeVersionForModel(uint8_t* model_buffer_pointer) {
   }
 }
 
-}  // namespace tflite
+}  // namespace tflite_migration
