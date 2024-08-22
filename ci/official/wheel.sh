@@ -44,4 +44,7 @@ fi
 
 if [[ "$TFCI_WHL_BAZEL_TEST_ENABLE" == 1 ]]; then
   tfrun bazel test $TFCI_BAZEL_COMMON_ARGS --config="${TFCI_BAZEL_TARGET_SELECTING_CONFIG_PREFIX}_wheel_test"
+  if [[ "TFCI_BAZEL_TARGET_SELECTING_CONFIG_PREFIX" == "linux_cuda" ]]; then
+    tfrun bazel test $TFCI_BAZEL_COMMON_ARGS --config="${TFCI_BAZEL_TARGET_SELECTING_CONFIG_PREFIX}_wheel_api_test"
+  fi
 fi

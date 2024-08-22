@@ -3,12 +3,22 @@
 
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
 load("@local_config_syslibs//:build_defs.bzl", "if_not_system_lib")
-load("@local_xla//xla/tsl/mkl:build_defs.bzl", "if_enable_mkl", "if_mkl", "if_mkl_ml")
+load(
+    "@local_xla//xla/tsl/mkl:build_defs.bzl",
+    "if_enable_mkl",
+    "if_mkl",
+    "if_mkl_ml",
+)
 load("//tensorflow:tensorflow.bzl", "if_with_tpu_support", "transitive_hdrs")
 load("//tensorflow/core/platform:build_config_root.bzl", "tf_additional_license_deps")
 load("//tensorflow/tools/pip_package/utils:data_deps.bzl", "collect_data_files")
 load("//tensorflow/tools/pip_package/utils:py_deps.bzl", "transitive_py_deps")
-load("//tensorflow/tools/pip_package/utils:tf_wheel.bzl", "tf_wheel")
+load(
+    "//tensorflow/tools/pip_package/utils:tf_wheel.bzl",
+    "tf_wheel",
+    "unpack_tf_wheel",
+    "wheel_api_test",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -290,5 +300,39 @@ tf_wheel(
     xla_aot_compiled = [
         "//tensorflow/compiler/tf2xla:xla_compiled_cpu_runtime_srcs",
         ":xla_cmake",
+    ],
+)
+
+unpack_tf_wheel(
+    name = "unpacked_tf_wheel",
+    wheel = ":wheel",
+)
+
+wheel_api_test(
+    name = "test_import_api_packages",
+    srcs = "test_import_api_packages.py",
+    data = [":unpacked_tf_wheel"],
+    env = {"UNPACKED_WHEEL": "$(location :unpacked_tf_wheel)"},
+    include_backends = [
+        "cpu",
+        "gpu",
+    ],
+    tags = ["no_windows"],
+    deps = [
+        ":unpacked_tf_wheel",
+        "//third_party/py/numpy",
+        "@absl_py//absl:app",
+        "@absl_py//absl/testing:parameterized",
+        "@com_google_protobuf//:protobuf_python",
+        "@flatbuffers//:runtime_py",
+        "@ml_dtypes",
+        "@pypi_astunparse//:pkg",
+        "@pypi_gast//:pkg",
+        "@pypi_opt_einsum//:pkg",
+        "@pypi_packaging//:pkg",
+        "@pypi_requests//:pkg",
+        "@pypi_termcolor//:pkg",
+        "@pypi_typing_extensions//:pkg",
+        "@pypi_wrapt//:pkg",
     ],
 )

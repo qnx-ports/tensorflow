@@ -25,6 +25,7 @@ Should be set via --repo_env=WHEEL_NAME=tensorflow_cpu.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@python_version_repo//:py_version.bzl", "WHEEL_COLLAB", "WHEEL_NAME")
+load("//tensorflow:strict.default.bzl", "py_strict_test")
 load("//tensorflow:tensorflow.bzl", "VERSION")
 
 def _tf_wheel_impl(ctx):
@@ -83,3 +84,51 @@ tf_wheel = rule(
     },
     implementation = _tf_wheel_impl,
 )
+
+def _unpack_tf_wheel_impl(ctx):
+    output_dir = ctx.actions.declare_directory(ctx.label.name)
+    ctx.actions.run(
+        outputs = [output_dir],
+        inputs = [ctx.file.wheel],
+        executable = "unzip",
+        arguments = [str(ctx.file.wheel.path) + "/*", "-d", output_dir.path],
+    )
+    import_paths = [
+        "/".join([ctx.workspace_name, x.short_path])
+        for x in depset([output_dir]).to_list()
+    ]
+    return [
+        DefaultInfo(files = depset([output_dir])),
+        PyInfo(
+            imports = depset(direct = import_paths, transitive = [
+                dep[PyInfo].imports
+                for dep in ctx.attr.deps
+            ]),
+            transitive_sources = depset(transitive = [
+                dep[PyInfo].transitive_sources
+                for dep in ctx.attr.deps
+            ]),
+        ),
+    ]
+
+unpack_tf_wheel = rule(
+    implementation = _unpack_tf_wheel_impl,
+    attrs = {
+        "wheel": attr.label(mandatory = True, allow_single_file = True),
+        "deps": attr.label_list(
+            providers = [PyInfo],
+        ),
+    },
+)
+
+def wheel_api_test(name, srcs, data = [], env = {}, deps = [], include_backends = [], tags = []):
+    for backend in include_backends:
+        py_strict_test(
+            name = name + "_" + backend,
+            srcs = [srcs],
+            main = srcs,
+            data = data,
+            env = env,
+            deps = deps,
+            tags = [backend] + tags,
+        )
