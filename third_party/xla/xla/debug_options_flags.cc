@@ -145,7 +145,6 @@ DebugOptions DefaultDebugOptionsIgnoringFlags() {
   opts.set_xla_detailed_logging(true);
   opts.set_xla_enable_dumping(true);
 
-  opts.set_xla_gpu_enable_custom_fusions(false);
   opts.set_xla_gpu_enable_dynamic_slice_fusion(true);
   opts.set_xla_gpu_nccl_termination_timeout_seconds(-1);
   opts.set_xla_gpu_enable_shared_constants(true);
@@ -1310,11 +1309,6 @@ void MakeDebugOptionsFlags(std::vector<tsl::Flag>* flag_list,
       "MLIR will be in the llvm-parsable format and can be processed by "
       "mlir-opt tools. "
       "Pretty print form is not legal MLIR."));
-  flag_list->push_back(tsl::Flag(
-      "xla_gpu_enable_custom_fusions",
-      bool_setter_for(&DebugOptions::set_xla_gpu_enable_custom_fusions),
-      debug_options->xla_gpu_enable_custom_fusions(),
-      "Whether to enable XLA custom fusions"));
   flag_list->push_back(tsl::Flag(
       "xla_gpu_enable_custom_fusions_re",
       string_setter_for(&DebugOptions::set_xla_gpu_enable_custom_fusions_re),

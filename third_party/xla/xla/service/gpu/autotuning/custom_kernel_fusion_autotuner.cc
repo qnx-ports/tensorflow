@@ -195,6 +195,10 @@ absl::StatusOr<bool> AutotuneCustomKernelFusion(
 absl::StatusOr<bool> CustomKernelFusionAutotuner::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
+  if (config_.IsDeviceless()) {
+    return false;
+  }
+
   const DebugOptions& debug_options = module->config().debug_options();
   TF_ASSIGN_OR_RETURN(std::optional<AutotunerCompileUtil> compile_util,
                       AutotunerCompileUtil::Create(config_, debug_options));

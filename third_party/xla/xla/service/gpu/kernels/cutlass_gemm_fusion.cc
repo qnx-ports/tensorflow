@@ -100,13 +100,22 @@ struct GemmWithDynamicSlice {
   HloInstruction* bitcast = nullptr;       // result bitcast
   HloInstruction* update_slice = nullptr;  // update result slice
 };
-}  // namespace
+
+bool IsRowMajor(const HloInstruction* instr) {
+  return instr->shape().layout().minor_to_major().back() == 0;
+}
 
 // Returns OK if dot instruction is a simple 2D row-major gemm.
-static absl::Status MatchRowMajorGemm(HloDotInstruction* dot) {
+absl::Status MatchRowMajorGemm(HloDotInstruction* dot) {
   if (dot->operand(0)->shape().dimensions_size() != 2 ||
       dot->operand(1)->shape().dimensions_size() != 2) {
     return absl::InternalError("operands must have rank 2");
+  }
+
+  if (!IsRowMajor(dot->operand(0)) || !IsRowMajor(dot->operand(1)) ||
+      !IsRowMajor(dot)) {
+    return absl::InternalError(
+        "Operands and result must have row major layout.");
   }
 
   auto& dot_dims = dot->dot_dimension_numbers();
@@ -123,6 +132,7 @@ static absl::Status MatchRowMajorGemm(HloDotInstruction* dot) {
 
   return absl::OkStatus();
 }
+}  // namespace
 
 // Return OK if dot instruction is a simple gemm with all operands and result
 // having the same data type.
@@ -265,7 +275,7 @@ bool IsSupportedKernel(PrimitiveType lhs, PrimitiveType rhs,
                        PrimitiveType dot) {
   // List of supported kernels using {lhs_type, rhs_type, dot_type}.
   constexpr std::array<std::array<PrimitiveType, 3>, 4> kSupportedKernels = {
-      {{BF16, BF16, F32}, {BF16, F32, F32}, {F32, BF16, F32}, {BF16, S8, F32}}};
+      {{BF16, BF16, F32}, {F32, BF16, F32}, {BF16, S8, F32}}};
   return absl::c_linear_search(kSupportedKernels,
                                std::array<PrimitiveType, 3>{lhs, rhs, dot});
 }
@@ -279,7 +289,11 @@ CutlassGemmWithUpcastPattern::TryMatch(const se::DeviceDescription& device,
 
   absl::StatusOr<GemmWithUpcast> matched = MatchGemmWithUpcast(dot);
 
-  if (!matched.ok()) return std::nullopt;
+  if (!matched.ok()) {
+    VLOG(3) << "No match due to unsupported gemm with upcast: "
+            << matched.status();
+    return std::nullopt;
+  }
 
   CustomFusionConfig config;
   config.set_name("cutlass_gemm_with_upcast");

@@ -29,7 +29,9 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "xla/autotuning.pb.h"
+#include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "xla/hlo/ir/hlo_computation.h"
+#include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/pjrt/distributed/key_value_store_interface.h"
@@ -44,6 +46,17 @@ limitations under the License.
 
 namespace xla {
 namespace gpu {
+
+class GemmFusionAutotunerVisitor : public DfsHloRewriteVisitor {
+ public:
+  explicit GemmFusionAutotunerVisitor(const AutotuneConfig& config)
+      : config_(config) {}
+
+  absl::Status HandleFusion(HloInstruction* hlo) override;
+
+ private:
+  AutotuneConfig config_;
+};
 
 // Find best tiling configuration for each triton fusion outlined.
 class GemmFusionAutotuner : public HloModulePass {
@@ -71,7 +84,6 @@ class GemmFusionAutotuner : public HloModulePass {
   MultiProcessKeyValueStore key_value_store_;
 };
 
-// Autotuner implementation.
 class GemmFusionAutotunerImpl {
  public:
   GemmFusionAutotunerImpl(const AutotuneConfig config,
@@ -90,7 +102,12 @@ class GemmFusionAutotunerImpl {
     int64_t plan_id;
     bool operator<(const CuDnnConfig& other) const;
   };
-  using Config = std::variant<CuBlasConfig, CuDnnConfig, TritonGemmConfig>;
+  struct CustomKernelFusionConfig {
+    int64_t kernel_index;
+    bool operator<(const CustomKernelFusionConfig& other) const;
+  };
+  using Config = std::variant<CuBlasConfig, CuDnnConfig,
+                              CustomKernelFusionConfig, TritonGemmConfig>;
   using TilingConfigs =
       std::vector<std::pair<const HloFusionInstruction*, std::vector<Config>>>;
 
