@@ -551,3 +551,12 @@ func.func @scatter(%input_tensor: tensor<200x100x300xf32>,
 // CHECK-NEXT:  }) : (tensor<200x100x300xf32>, tensor<10x2xi32>, tensor<10x300xf32>) -> tensor<200x100x300xf32>
 // CHECK-NEXT:  return %0 : tensor<200x100x300xf32>
 // CHECK-NEXT: }
+
+// CHECK-LABEL: @cbrt
+func.func @cbrt(%arg0: tensor<1x1x1x96xf32>) -> tensor<1x1x1x96xf32> {
+  %0 = "vhlo.cbrt_v1" (%arg0) : (tensor<1x1x1x96xf32>) -> tensor<1x1x1x96xf32>
+  func.return %0 : tensor<1x1x1x96xf32>
+}
+
+//CHECK: %0 = "vhlo.cbrt_v1"(%arg0) : (tensor<1x1x1x96xf32>) -> tensor<1x1x1x96xf32>
+//CHECK: return %0 : tensor<1x1x1x96xf32>

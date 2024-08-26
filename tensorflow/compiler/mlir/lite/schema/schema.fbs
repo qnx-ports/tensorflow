@@ -472,6 +472,7 @@ enum BuiltinOperator : int32 {
   STABLEHLO_RNG_BIT_GENERATOR = 204,
   REDUCE_WINDOW = 205 (deprecated),
   STABLEHLO_COMPOSITE = 206, // WARNING: No runtime support
+  STABLEHLO_CBRT = 207, // WARNING: No runtime support
 }
 // LINT.ThenChange(nnapi_linter/linter.proto)
 

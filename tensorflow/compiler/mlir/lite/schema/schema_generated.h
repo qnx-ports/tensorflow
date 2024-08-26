@@ -1220,11 +1220,12 @@ enum BuiltinOperator : int32_t {
   BuiltinOperator_STABLEHLO_RNG_BIT_GENERATOR = 204,
   BuiltinOperator_REDUCE_WINDOW = 205,
   BuiltinOperator_STABLEHLO_COMPOSITE = 206,
+  BuiltinOperator_STABLEHLO_CBRT = 207,
   BuiltinOperator_MIN = BuiltinOperator_ADD,
-  BuiltinOperator_MAX = BuiltinOperator_STABLEHLO_COMPOSITE
+  BuiltinOperator_MAX = BuiltinOperator_STABLEHLO_CBRT
 };
 
-inline const BuiltinOperator (&EnumValuesBuiltinOperator())[207] {
+inline const BuiltinOperator (&EnumValuesBuiltinOperator())[208] {
   static const BuiltinOperator values[] = {
     BuiltinOperator_ADD,
     BuiltinOperator_AVERAGE_POOL_2D,
@@ -1432,13 +1433,14 @@ inline const BuiltinOperator (&EnumValuesBuiltinOperator())[207] {
     BuiltinOperator_DILATE,
     BuiltinOperator_STABLEHLO_RNG_BIT_GENERATOR,
     BuiltinOperator_REDUCE_WINDOW,
-    BuiltinOperator_STABLEHLO_COMPOSITE
+    BuiltinOperator_STABLEHLO_COMPOSITE,
+    BuiltinOperator_STABLEHLO_CBRT
   };
   return values;
 }
 
 inline const char * const *EnumNamesBuiltinOperator() {
-  static const char * const names[208] = {
+  static const char * const names[209] = {
     "ADD",
     "AVERAGE_POOL_2D",
     "CONCATENATION",
@@ -1646,13 +1648,14 @@ inline const char * const *EnumNamesBuiltinOperator() {
     "STABLEHLO_RNG_BIT_GENERATOR",
     "REDUCE_WINDOW",
     "STABLEHLO_COMPOSITE",
+    "STABLEHLO_CBRT",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameBuiltinOperator(BuiltinOperator e) {
-  if (::flatbuffers::IsOutRange(e, BuiltinOperator_ADD, BuiltinOperator_STABLEHLO_COMPOSITE)) return "";
+  if (::flatbuffers::IsOutRange(e, BuiltinOperator_ADD, BuiltinOperator_STABLEHLO_CBRT)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesBuiltinOperator()[index];
 }
