@@ -49,7 +49,6 @@ package_group(
 tf_proto_library(
     name = "hlo_proto",
     srcs = ["hlo.proto"],
-    cc_api_version = 2,
     make_default_target_header_only = True,
     protodeps = [
         "//xla:xla_data_proto",
@@ -67,20 +66,17 @@ tf_pyclif_proto_library(
 tf_proto_library(
     name = "hlo_profile_printer_data",
     srcs = ["hlo_profile_printer_data.proto"],
-    cc_api_version = 2,
 )
 
 tf_proto_library(
     name = "hlo_execution_profile_data",
     srcs = ["hlo_execution_profile_data.proto"],
-    cc_api_version = 2,
     protodeps = [":hlo_profile_printer_data"],
 )
 
 tf_proto_library(
     name = "metrics_proto",
     srcs = ["metrics.proto"],
-    cc_api_version = 2,
     protodeps = if_google([
         "@com_google_protobuf//:any",
         "@com_google_protobuf//:duration",
@@ -4188,6 +4184,7 @@ cc_library(
         "//xla:xla_data_proto_cc",
         "//xla/client:xla_builder",
         "//xla/hlo/ir:hlo",
+        "//xla/tsl/lib/monitoring:gauge",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/functional:function_ref",
@@ -4198,7 +4195,6 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
-        "@local_tsl//tsl/lib/monitoring:gauge",
         "@local_tsl//tsl/platform:errors",
         "@local_tsl//tsl/platform:statusor",
     ],
@@ -7815,7 +7811,6 @@ tf_proto_library(
     name = "test_compilation_environment_proto",
     testonly = 1,
     srcs = ["test_compilation_environment.proto"],
-    cc_api_version = 2,
 )
 
 xla_cc_test(
@@ -8350,7 +8345,6 @@ xla_cc_test(
 tf_proto_library(
     name = "buffer_assignment_proto",
     srcs = ["buffer_assignment.proto"],
-    cc_api_version = 2,
     make_default_target_header_only = True,
 )
 

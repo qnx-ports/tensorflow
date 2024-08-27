@@ -227,7 +227,6 @@ xla_test(
 tf_proto_library(
     name = "gpu_topology_proto",
     srcs = ["gpu_topology.proto"],
-    cc_api_version = 2,
     visibility = ["//visibility:public"],
 )
 
@@ -294,9 +293,9 @@ cc_library(
     srcs = ["gpu_metrics.cc"],
     hdrs = ["gpu_metrics.h"],
     deps = [
+        "//xla/tsl/lib/monitoring:gauge",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
-        "@local_tsl//tsl/lib/monitoring:gauge",
     ],
 )
 

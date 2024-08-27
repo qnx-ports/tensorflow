@@ -69,7 +69,6 @@ exports_files(srcs = ["gpu_compiler_test_autotune_db.textproto"])
 tf_proto_library(
     name = "backend_configs",
     srcs = ["backend_configs.proto"],
-    cc_api_version = 2,
     make_default_target_header_only = True,
     protodeps = [
         "//xla:xla_data_proto",
@@ -268,6 +267,7 @@ cc_library(
     srcs = ["gpu_device_info_for_tests.cc"],
     hdrs = ["gpu_device_info_for_tests.h"],
     compatible_with = get_compatible_with_portable(),
+    local_defines = if_rocm_is_configured(["TENSORFLOW_USE_ROCM=1"]),
     deps = [
         "//xla/stream_executor:device_description",
     ],
@@ -1070,7 +1070,6 @@ cc_library(
 tf_proto_library(
     name = "fusion_process_dump_proto",
     srcs = ["fusion_process_dump.proto"],
-    cc_api_version = 2,
     protodeps = [
         "//xla/stream_executor:device_description_proto",
     ],
@@ -1178,7 +1177,6 @@ cc_library(
 tf_proto_library(
     name = "executable_proto",
     srcs = ["executable.proto"],
-    cc_api_version = 2,
     protodeps = [
         "//xla/service:hlo_proto",
         "//xla:xla_proto",
@@ -1565,6 +1563,7 @@ cc_library(
         "//xla/stream_executor:platform_manager",
         "//xla/translate/hlo_to_mhlo:hlo_utils",
         "//xla/translate/mhlo_to_hlo:location_exporter",
+        "//xla/tsl/lib/monitoring:counter",
         "//xla:autotune_results_proto_cc",
         "//xla:debug_options_flags",
         "//xla:shape_util",
@@ -1573,7 +1572,6 @@ cc_library(
         "//xla:util",
         "//xla:xla_data_proto_cc",
         "//xla:xla_proto_cc",
-        "@local_tsl//tsl/lib/monitoring:counter",
         "@local_tsl//tsl/platform:blocking_counter",
         "@local_tsl//tsl/platform:casts",
         "@local_tsl//tsl/platform:env",
@@ -2603,9 +2601,9 @@ cc_library(
     srcs = ["metrics.cc"],
     hdrs = ["metrics.h"],
     deps = [
-        "@local_tsl//tsl/lib/monitoring:counter",
-        "@local_tsl//tsl/lib/monitoring:gauge",
-        "@local_tsl//tsl/lib/monitoring:sampler",
+        "//xla/tsl/lib/monitoring:counter",
+        "//xla/tsl/lib/monitoring:gauge",
+        "//xla/tsl/lib/monitoring:sampler",
     ],
 )
 
