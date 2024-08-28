@@ -38,6 +38,7 @@ limitations under the License.
 #include "xla/protobuf_util.h"
 #include "xla/service/hlo_dce.h"
 #include "xla/service/hlo_parser.h"
+#include "xla/service/spmd/spmd_partitioner_util.h"
 #include "xla/tests/hlo_test_base.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
@@ -12153,6 +12154,46 @@ ENTRY main {
   auto* add = FindInstruction(module.get(), "add");
   ASSERT_NE(add, nullptr);
   EXPECT_THAT(add, op::Sharding("{devices=[1,1,16,64]<=[64,16]T(1,0)}"));
+}
+
+// Modified from b/357703299. Check that we do not propagate sharding to
+// SPMDShardToFullShape.
+TEST_F(ShardingPropagationTest, CallPropagationWithSPMDShardToFullShape) {
+  const absl::string_view hlo_string = R"(
+HloModule module
+
+called_computation {
+  p0 = bf16[4096,4096] parameter(0)
+  %add_called_comp = bf16[4096,4096] add(p0, p0)
+  ROOT tuple = (bf16[4096,4096]) tuple(add_called_comp)
+}
+
+ENTRY main {
+  %param0 = bf16[2048,4096] parameter(0)
+  %add = bf16[2048,4096] add(param0, param0)
+  %custom-call = bf16[4096,4096]{1,0} custom-call(bf16[2048,4096]{1,0} %add), custom_call_target="SPMDShardToFullShape", sharding={devices=[2,1,2]<=[4] last_tile_dim_replicate}
+  ROOT %call = (bf16[4096,4096]) call(custom-call), to_apply=%called_computation, sharding={devices=[2,2]<=[4]}
+})";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool changed,
+      ShardingPropagation(
+          /*is_spmd=*/true, /*propagate_metadata=*/true,
+          /*allow_spmd_sharding_propagation_to_output=*/{false},
+          /*allow_spmd_sharding_propagation_to_parameters=*/{false})
+          .Run(module.get()));
+  XLA_VLOG_LINES(1, module->ToString());
+  EXPECT_TRUE(changed);
+  auto* add = FindInstruction(module.get(), "add");
+  ASSERT_NE(add, nullptr);
+  auto* custom_call = FindInstruction(module.get(), "custom-call");
+  ASSERT_NE(custom_call, nullptr);
+  CHECK(ShapeUtil::Compatible(
+      add->shape(), spmd::MakePartitionedShape(custom_call->shape(),
+                                               custom_call->sharding())));
+  EXPECT_THAT(custom_call,
+              op::Sharding("{devices=[2,1,2]<=[4] last_tile_dim_replicate}"));
 }
 
 }  // namespace

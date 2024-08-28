@@ -801,6 +801,7 @@ xla_cc_test(
         "//xla/hlo/ir:hlo",
         "//xla/hlo/transforms:hlo_constant_splitter",
         "//xla/hlo/utils:hlo_matchers",
+        "//xla/service/spmd:spmd_partitioner",
         "//xla/tests:hlo_test_base",
         "//xla/tests:xla_internal_test_main",
         "@com_google_absl//absl/log",
