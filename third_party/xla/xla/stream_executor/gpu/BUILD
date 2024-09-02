@@ -787,9 +787,8 @@ xla_test(
 
 xla_test(
     name = "gpu_command_buffer_test",
-    srcs = if_gpu_is_configured(["gpu_command_buffer_test.cc"]),
+    srcs = ["gpu_command_buffer_test.cc"],
     backends = ["gpu"],
-    local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]) + if_rocm_is_configured(["TENSORFLOW_USE_ROCM=1"]),
     deps = [
         ":gpu_command_buffer",
         ":gpu_driver_header",
@@ -801,8 +800,11 @@ xla_test(
         "//xla/stream_executor:kernel_spec",
         "//xla/stream_executor:platform",
         "//xla/stream_executor:platform_manager",
+        "//xla/stream_executor:semantic_version",
         "//xla/stream_executor:trace_command_buffer_factory",
         "//xla/stream_executor:typed_kernel_factory",
+        "//xla/stream_executor/cuda:cuda_platform_id",
+        "//xla/stream_executor/rocm:rocm_platform_id",
         "//xla/tsl/lib/core:status_test_util",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",

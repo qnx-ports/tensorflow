@@ -704,3 +704,28 @@ cc_library(
         [":all_runtime"],
     ),
 )
+
+cc_library(
+    name = "rocm_version_parser",
+    srcs = ["rocm_version_parser.cc"],
+    hdrs = ["rocm_version_parser.h"],
+    deps = [
+        "//xla/stream_executor:semantic_version",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+cc_test(
+    name = "rocm_version_parser_test",
+    srcs = ["rocm_version_parser_test.cc"],
+    deps = [
+        ":rocm_version_parser",
+        "//xla/stream_executor:semantic_version",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@local_config_rocm//rocm:rocm_headers",
+        "@local_tsl//tsl/platform:status_matchers",
+        "@local_tsl//tsl/platform:test",
+    ],
+)

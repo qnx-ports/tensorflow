@@ -269,6 +269,7 @@ cc_library(
     local_defines = if_rocm_is_configured(["TENSORFLOW_USE_ROCM=1"]),
     deps = [
         "//xla/stream_executor:device_description",
+        "//xla/stream_executor:semantic_version",
     ],
 )
 
@@ -1588,7 +1589,11 @@ cc_library(
         # go/keep-sorted end
     ]) + xla_internal(["service:export_hlo"]) + if_google([
         "//xla/hlo/experimental/auto_sharding",
-    ]),
+    ]) + [
+        "//xla/hlo/experimental/auto_sharding:auto_sharding_option",
+        "//xla/pjrt/distributed:key_value_store_interface",
+        "//xla/stream_executor:semantic_version",
+    ],
 )
 
 xla_test(
@@ -1776,6 +1781,7 @@ cc_library(
         "//xla/stream_executor/cuda:cuda_diagnostics",
         "//xla/stream_executor/cuda:cuda_driver",
         "//xla/stream_executor/cuda:cuda_platform_id",
+        "//xla/stream_executor/cuda:cuda_version_parser",
         "//xla/stream_executor/cuda:nvjitlink",
         "//xla/stream_executor/cuda:nvjitlink_support",
         "//xla/stream_executor/cuda:ptx_compilation_method",
@@ -1785,6 +1791,7 @@ cc_library(
         "//xla/stream_executor/gpu:gpu_asm_opts",
         "//xla/stream_executor/gpu:gpu_driver_header",
         "//xla/stream_executor/gpu:gpu_executor_header",
+        "//xla/stream_executor/gpu:gpu_runtime_header",
         "//xla/tsl/util:env_var",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base",
@@ -2743,6 +2750,7 @@ xla_test(
         "//xla:xla_data_proto_cc",
         "//xla/hlo/ir:hlo",
         "//xla/stream_executor:device_description",
+        "//xla/stream_executor:semantic_version",
         "//xla/tests:hlo_test_base",
         "//xla/tests:xla_internal_test_main",  # fixdeps: keep
         "@com_google_absl//absl/strings",

@@ -31,15 +31,12 @@ limitations under the License.
 #include "xla/service/platform_util.h"
 #include "xla/service/tuple_simplifier.h"
 #include "xla/stream_executor/device_description.h"
+#include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/tests/hlo_test_base.h"
 #include "xla/tsl/lib/core/status_test_util.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/platform/test.h"
-
-#if GOOGLE_CUDA
-#include "third_party/gpus/cuda/include/cuda.h"
-#endif
 
 namespace xla::gpu {
 namespace {
@@ -191,9 +188,11 @@ ENTRY main {
   TF_ASSERT_OK_AND_ASSIGN(changed, RunHloPass(ConvRewriter(cc), m.get()));
   ASSERT_TRUE(changed);
   TF_ASSERT_OK_AND_ASSIGN(
-      changed, RunHloPass(CudnnFusedConvRewriter(GetCudaComputeCapability(),
-                                                 GetDnnVersion(), CUDA_VERSION),
-                          m.get()));
+      changed,
+      RunHloPass(CudnnFusedConvRewriter(
+                     GetCudaComputeCapability(), GetDnnVersion(),
+                     stream_exec->GetDeviceDescription().runtime_version()),
+                 m.get()));
   ASSERT_TRUE(changed);
 
   DebugOptions opts = DefaultDebugOptionsIgnoringFlags();

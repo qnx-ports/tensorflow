@@ -39,7 +39,6 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
-#include "third_party/gpus/cuda/include/cuda.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
@@ -95,8 +94,9 @@ limitations under the License.
 #include "xla/service/tuple_simplifier.h"
 #include "xla/stream_executor/cuda/cuda_asm_compiler.h"
 #include "xla/stream_executor/cuda/cuda_diagnostics.h"
-#include "xla/stream_executor/cuda/cuda_driver.h"  // IWYU pragma : keep - Needed for GpuContext
+#include "xla/stream_executor/cuda/cuda_driver.h"  // IWYU pragma : keep - Needed for GpuContext.
 #include "xla/stream_executor/cuda/cuda_platform_id.h"
+#include "xla/stream_executor/cuda/cuda_version_parser.h"
 #include "xla/stream_executor/cuda/nvjitlink.h"
 #include "xla/stream_executor/cuda/nvjitlink_support.h"
 #include "xla/stream_executor/cuda/ptx_compilation_method.h"
@@ -109,6 +109,7 @@ limitations under the License.
 #include "xla/stream_executor/gpu/gpu_asm_opts.h"
 #include "xla/stream_executor/gpu/gpu_driver.h"
 #include "xla/stream_executor/gpu/gpu_executor.h"
+#include "xla/stream_executor/gpu/gpu_runtime.h"
 #include "xla/stream_executor/semantic_version.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/tsl/util/env_var.h"
@@ -185,7 +186,11 @@ class MatmulBfloat16Support : public FloatSupport {
 
 }  // namespace
 
-int32_t NVPTXCompiler::GetToolkitVersion() const { return CUDA_VERSION; }
+se::SemanticVersion NVPTXCompiler::GetToolkitVersion() const {
+  return stream_executor::ParseCudaVersion(
+             stream_executor::gpu::GpuRuntime::GetRuntimeVersion().value_or(0))
+      .value_or(stream_executor::SemanticVersion{0, 0, 0});
+}
 
 absl::Status NVPTXCompiler::OptimizeHloConvolutionCanonicalization(
     HloModule* hlo_module, se::GpuComputeCapability gpu_version,

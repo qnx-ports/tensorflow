@@ -65,14 +65,14 @@ limitations under the License.
 #include "xla/service/gpu/hlo_traversal.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/matmul_utils.h"
-#include "xla/service/gpu/model/gpu_hlo_cost_analysis.h"
 #include "xla/service/gpu/split_k_gemm_rewriter.h"
 #include "xla/service/gpu/stream_executor_util.h"
 #include "xla/service/gpu/transforms/cudnn_fusion_compiler.h"
 #include "xla/service/gpu/transforms/fusion_wrapper.h"
 #include "xla/service/gpu/transforms/gemm_rewriter.h"
-#include "xla/service/gpu/transforms/instruction_fusion.h"
 #include "xla/service/gpu/transforms/priority_fusion.h"
+#include "xla/service/hlo_cost_analysis.h"
+#include "xla/service/hlo_graph_dumper.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/service/shaped_buffer.h"
 #include "xla/shape.h"
@@ -82,6 +82,7 @@ limitations under the License.
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/gpu/redzone_allocator.h"
+#include "xla/stream_executor/semantic_version.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor_memory_allocator.h"
 #include "xla/tools/hlo_decomposer.h"
@@ -91,6 +92,7 @@ limitations under the License.
 #include "xla/xla.pb.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/blocking_counter.h"
+#include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/path.h"
 #include "tsl/platform/protobuf.h"
@@ -384,8 +386,8 @@ absl::StatusOr<std::unique_ptr<HloModule>> TritonGemmAutotuneExtractor(
 
 absl::StatusOr<std::unique_ptr<HloModule>> CublasGemmAutotuneExtractor(
     const AutotuneConfig& config, const se::DeviceDescription& gpu_device_info,
-    const int32_t toolkit_version, const HloFusionInstruction* fusion,
-    const DebugOptions& debug_opts) {
+    const se::SemanticVersion& toolkit_version,
+    const HloFusionInstruction* fusion, const DebugOptions& debug_opts) {
   const HloComputation* fusion_computation =
       fusion->called_computations().at(0);
   std::unique_ptr<HloModule> new_module =
@@ -513,7 +515,7 @@ absl::Status DumpOriginalFusion(AutotunerCompileUtil& util,
 }
 
 absl::Status DumpAutotunedFusion(const AutotuneConfig& autotune_config,
-                                 const int32_t toolkit_version,
+                                 const se::SemanticVersion& toolkit_version,
                                  AutotunerCompileUtil& util,
                                  const AutotuneResult result,
                                  const HloFusionInstruction* fusion,
