@@ -235,17 +235,32 @@ bool HasSameStridedShape(TFL::Conv3DOp op, ArrayRef<int64_t> pre_pad_shape) {
 
 using ::llvm::cast;
 
+bool ContractingDimsProductEqual(Value input, Value output,
+                                 size_t agg_start_idx) {
+  ArrayRef<int64_t> input_shape =
+      mlir::cast<ShapedType>(input.getType()).getShape();
+  ArrayRef<int64_t> output_shape =
+      mlir::cast<ShapedType>(output.getType()).getShape();
+
+  int agg_value = 1;
+  for (size_t i = agg_start_idx; i < input_shape.size(); ++i) {
+    agg_value *= input_shape[i];
+  }
+
+  return (agg_value == output_shape[output_shape.size() - 1]);
+}
+
 // Return true if the product of dimension values of a subsection of the
 // tensor is equal to the non-contracting dimension after a reshape
-bool BroadcastDimsProductEqual(Value input, Value output,
-                               size_t agg_start_idx) {
+bool BroadcastDimsProductEqual(Value input, Value output, size_t agg_start_idx,
+                               size_t agg_end_idx) {
   ArrayRef<int64_t> input_shape =
       mlir::cast<ShapedType>(input.getType()).getShape();
   ArrayRef<int64_t> output_shape =
       mlir::cast<ShapedType>(output.getType()).getShape();
 
   int64_t agg_value = 1;
-  for (size_t i = agg_start_idx; i < input_shape.size() - 1; ++i) {
+  for (size_t i = agg_start_idx; i <= agg_end_idx; ++i) {
     agg_value *= input_shape[i];
   }
 

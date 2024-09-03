@@ -26,6 +26,9 @@ def CreateNoneValue : NativeCodeCall<
 // if called without a ranked tensor it will fail.
 def GetShape: NativeCodeCall<"GetShape($0)">;
 
+class GetExpandedShape<int n> : NativeCodeCall<
+  "GetExpandedShape($0.cast<DenseElementsAttr>(), " # n # ")">;
+
 // Constraint that values in list attribute are all ones.
 def IsAllOnesConstant : Constraint<CPred<"TFL::IsAllOnesConstant($0)">>;
 
