@@ -103,7 +103,9 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
+#include "xla/stream_executor/cuda/cuda_asm_compiler.h"
 #include "xla/stream_executor/device_description.h"
+#include "xla/stream_executor/semantic_version.h"
 #include "xla/tsl/framework/mlir/status_scoped_diagnostic_handler.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
@@ -307,7 +309,7 @@ MlirFusionEmitterBase::CreateLLVMModule(
   mlir::PassManager pm(&mlir_context);
   AddXlaGpuOpsOptimizationPasses(pm);
   AddLoopTransformationPasses(pm);
-  AddLoweringPasses(pm, device);
+  AddLoweringPasses(pm, device, hlo_module->config().debug_options());
   auto pipeline_status = RunPassPipeline(module.get(), pm, trace.get());
   if (trace) {
     DumpPerModuleProtobufToFile(
@@ -566,7 +568,8 @@ void AddLoopTransformationPasses(mlir::OpPassManager& pm) {
 }
 
 void AddLoweringPasses(mlir::OpPassManager& pm,
-                       const se::DeviceDescription& device) {
+                       const se::DeviceDescription& device,
+                       const DebugOptions& debug_options) {
   bool is_amd = std::holds_alternative<se::RocmComputeCapability>(
       device.gpu_compute_capability());
   pm.addNestedPass<FuncOp>(CreateConvertPureCallOpsPass());
@@ -590,8 +593,22 @@ void AddLoweringPasses(mlir::OpPassManager& pm,
   pm.addPass(mlir::createLoopInvariantCodeMotionPass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(mlir::createCSEPass());
+
+  auto ptx_version =
+      se::GetAsmCompilerVersion(debug_options.xla_gpu_cuda_data_dir());
   pm.addPass(CreateExpandFloatOpsPass(
-      !device.cuda_compute_capability().IsAtLeastAmpere()));
+      /*pre_ampere=*/!device.cuda_compute_capability().IsAtLeastAmpere(),
+      /*has_f8_cvt=*/!ptx_version.ok()
+          ? false
+          :
+          // FP8 conversion intrinsics are available on sm89 since ptx 8.1
+          *ptx_version >= se::SemanticVersion(8, 1, 0)
+          ? device.cuda_compute_capability().IsAtLeast(8, 9)
+          :
+          // Older ptx versions only support FP8 conversion for sm90
+          *ptx_version >= se::SemanticVersion(7, 8, 0)
+          ? device.cuda_compute_capability().IsAtLeast(9, 0)
+          : false));
   pm.addPass(mlir::createLowerAffinePass());
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(CreateLowerToLLVMPass(is_amd));

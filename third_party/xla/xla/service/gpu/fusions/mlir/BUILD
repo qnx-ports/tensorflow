@@ -176,6 +176,8 @@ cc_library(
         "//xla/service/gpu/runtime:kernel_thunk",
         "//xla/service/llvm_ir:llvm_util",
         "//xla/stream_executor:device_description",
+        "//xla/stream_executor:semantic_version",
+        "//xla/stream_executor/cuda:cuda_asm_compiler",
         "//xla/tsl/framework/mlir:status_scoped_diagnostic_handler",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",

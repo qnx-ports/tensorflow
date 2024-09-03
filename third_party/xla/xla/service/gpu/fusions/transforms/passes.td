@@ -151,13 +151,17 @@ def ExpandFloatOpsPass : Pass<"xla-gpu-expand-float-ops", "mlir::ModuleOp"> {
   }];
 
   let dependentDialects = [
-    "mlir::arith::ArithDialect", "mlir::math::MathDialect",
+    "mlir::LLVM::LLVMDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::math::MathDialect",
     "mlir::mhlo::MhloDialect"
   ];
 
   let options = [
     Option<"pre_ampere_", "pre-ampere", "bool", /*default=*/"false",
            "Rewrite ops that are not supported on architectures before Ampere">,
+    Option<"has_f8_cvt_", "has-f8-cvt", "bool", /*default=*/"false",
+           "Use float8 conversion intrinsics available on sm89+">,
   ];
 }
 

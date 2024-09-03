@@ -23,6 +23,7 @@ limitations under the License.
 #include "llvm/ADT/APFloat.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Math/Transforms/Passes.h"
@@ -48,6 +49,7 @@ namespace xla {
 namespace gpu {
 
 namespace ma = ::mlir::arith;
+namespace ml = ::mlir::LLVM;
 
 using ma::SelectOp;
 using mlir::Value;
@@ -488,6 +490,10 @@ Value EmitFloatConversion(Value value, mlir::FloatType to_ty,
 struct RewriteTruncFPattern : public mlir::OpRewritePattern<ma::TruncFOp> {
   using OpRewritePattern::OpRewritePattern;
 
+  RewriteTruncFPattern(mlir::MLIRContext* context, bool allow_intrinsics)
+      : mlir::OpRewritePattern<ma::TruncFOp>(context),
+        allow_intrinsics(allow_intrinsics) {}
+
   mlir::LogicalResult matchAndRewrite(
       ma::TruncFOp op, mlir::PatternRewriter& rewriter) const override {
     using FloatValue = mlir::TypedValue<mlir::FloatType>;
@@ -498,13 +504,123 @@ struct RewriteTruncFPattern : public mlir::OpRewritePattern<ma::TruncFOp> {
     }
 
     mlir::ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    rewriter.replaceOp(op, EmitFloatConversion(src, dst_ty, b));
+    bool use_intrinsic =
+        allow_intrinsics && (dst_ty.isFloat8E4M3FN() || dst_ty.isFloat8E5M2());
+    rewriter.replaceOp(op, use_intrinsic
+                               ? EmitTruncToF8Intrinsic(src, dst_ty, b)
+                               : EmitFloatConversion(src, dst_ty, b));
     return mlir::success();
   }
+
+  Value EmitTruncToF8Intrinsic(Value value, mlir::FloatType to_ty,
+                               mlir::ImplicitLocOpBuilder& b) const {
+    assert(to_ty.isFloat8E4M3FN() || to_ty.isFloat8E5M2());
+
+    ml::CallIntrinsicOp cvtOp;
+    if (value.getType() == b.getF16Type()) {
+      // Fast path for truncating F16 type.
+      Value vec =
+          b.create<ml::UndefOp>(ml::getFixedVectorType(value.getType(), 2));
+      vec = b.create<ml::InsertElementOp>(vec, value,
+                                          b.create<ma::ConstantIntOp>(0, 8));
+      auto cvtIntr = to_ty.isFloat8E4M3FN() ? "llvm.nvvm.f16x2.to.e4m3x2.rn"
+                                            : "llvm.nvvm.f16x2.to.e5m2x2.rn";
+      cvtOp = b.create<ml::CallIntrinsicOp>(b.getIntegerType(16), cvtIntr,
+                                            mlir::ValueRange{vec});
+    } else {
+      // Other FP types get converted to F32 first.
+      mlir::FloatType f32_ty = b.getF32Type();
+      if (value.getType().getIntOrFloatBitWidth() < f32_ty.getWidth()) {
+        value = b.create<ma::ExtFOp>(f32_ty, value);
+      } else if (value.getType() != f32_ty) {
+        value = b.create<ma::TruncFOp>(f32_ty, value);
+      }
+      auto cvtIntr = to_ty.isFloat8E4M3FN() ? "llvm.nvvm.ff.to.e4m3x2.rn"
+                                            : "llvm.nvvm.ff.to.e5m2x2.rn";
+      cvtOp = b.create<ml::CallIntrinsicOp>(b.getIntegerType(16), cvtIntr,
+                                            mlir::ValueRange{value, value});
+    }
+    Value res = b.create<ml::TruncOp>(b.getIntegerType(8), cvtOp.getResults());
+
+    // Downcasting to float8 saturates the value (uses "satfinite" modifier).
+    // Handle infinity separately to mitigate the issue.
+    mlir::Type src_int_ty =
+        b.getIntegerType(value.getType().getIntOrFloatBitWidth());
+    return FixInfinityConversionValue(
+        b.create<ma::BitcastOp>(src_int_ty, value),
+        mlir::cast<mlir::FloatType>(value.getType()), res, to_ty, b);
+  }
+
+  // If converting the input value would result in an infinity, return infinity
+  // (with sign copied); otherwise return the conversion result.
+  //
+  // The input values have integer types (source is wider than the destination),
+  // and actual floating point types are passed as extra arguments.
+  static Value FixInfinityConversionValue(Value src, mlir::FloatType src_type,
+                                          Value dst, mlir::FloatType dst_type,
+                                          mlir::ImplicitLocOpBuilder& b) {
+    // Extract and discard sign bit.
+    int sign_pos = src.getType().getIntOrFloatBitWidth() - 1;
+    Val input{src, &b};
+    Val sign_bit = input.shrui(sign_pos);
+    input = input & ((1ull << sign_pos) - 1);
+
+    // Values in the interval that contains all the values above the largest
+    // representable in the destination type, as well as the infinity (source),
+    // result in the infinity (destination).
+    int64_t lower = GetOverflowInputValue(src_type, dst_type);
+    int64_t upper = llvm::APFloat::getInf(src_type.getFloatSemantics())
+                        .bitcastToAPInt()
+                        .getZExtValue();
+    Val is_inf = input.cmp(ma::CmpIPredicate::ugt, lower) &
+                 input.cmp(ma::CmpIPredicate::ule, upper);
+
+    // Build signed infinity result value.
+    int64_t inf_val = llvm::APFloat::getInf(dst_type.getFloatSemantics())
+                          .bitcastToAPInt()
+                          .getZExtValue();
+    Val sign{b.create<ml::TruncOp>(dst.getType(), sign_bit), &b};
+    Value inf = sign.shl(7) | inf_val;
+
+    // Select result based on the predicate.
+    Value res = b.create<SelectOp>(is_inf, inf, dst);
+    return b.create<ma::BitcastOp>(dst_type, res);
+  }
+
+  // Calculate the minimum raw value (represented as an integer) that would
+  // overflow when converting from `src_type` to `dst_type` (floating point).
+  static int64_t GetOverflowInputValue(mlir::FloatType src_type,
+                                       mlir::FloatType dst_type) {
+    // Get type data from floating point semantics.
+    int src_mantissa = GetSignificandBits(src_type);
+    int src_bias = GetExponentBias(src_type);
+    int dst_mantissa = GetSignificandBits(dst_type);
+    int dst_bias = GetExponentBias(dst_type);
+    assert(src_mantissa > dst_mantissa);
+    assert(src_bias >= dst_bias);
+
+    // Get the largest value, shift to wider type and correct the exponent.
+    int64_t largest = llvm::APFloat::getLargest(dst_type.getFloatSemantics())
+                          .bitcastToAPInt()
+                          .getZExtValue();
+    int64_t threshold = largest << (src_mantissa - dst_mantissa);
+    threshold += int64_t{src_bias - dst_bias} << src_mantissa;
+
+    // Some values above the threshold could still be rounded down, so the
+    // actual threshold that rounds to infinity is higher.
+    threshold |= (1ull << (src_mantissa - dst_mantissa - 1)) - (largest & 1);
+    return threshold;
+  }
+
+  bool allow_intrinsics;
 };
 
 struct RewriteExtFPattern : public mlir::OpRewritePattern<ma::ExtFOp> {
   using OpRewritePattern::OpRewritePattern;
+
+  RewriteExtFPattern(mlir::MLIRContext* context, bool allow_intrinsics)
+      : mlir::OpRewritePattern<ma::ExtFOp>(context),
+        allow_intrinsics(allow_intrinsics) {}
 
   mlir::LogicalResult matchAndRewrite(
       ma::ExtFOp op, mlir::PatternRewriter& rewriter) const override {
@@ -516,9 +632,44 @@ struct RewriteExtFPattern : public mlir::OpRewritePattern<ma::ExtFOp> {
     }
 
     mlir::ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    rewriter.replaceOp(op, EmitFloatConversion(src, dst_ty, b));
+    bool use_intrinsic = allow_intrinsics && (src.getType().isFloat8E4M3FN() ||
+                                              src.getType().isFloat8E5M2());
+    rewriter.replaceOp(op, use_intrinsic
+                               ? EmitExtFromF8Intrinsic(src, dst_ty, b)
+                               : EmitFloatConversion(src, dst_ty, b));
     return mlir::success();
   }
+
+  Value EmitExtFromF8Intrinsic(Value value, mlir::FloatType to_ty,
+                               mlir::ImplicitLocOpBuilder& b) const {
+    assert(value.getType().isFloat8E4M3FN() || value.getType().isFloat8E5M2());
+
+    // Extend the smaller type to the FP16 type using the intrinsic, and then
+    // to the destination type. In the case of BF16 go through the intermediate
+    // FP32 type (as there's no F2F op for f16->bf16).
+    Value input = b.create<ml::ZExtOp>(
+        b.getIntegerType(16),
+        b.create<ma::BitcastOp>(b.getIntegerType(8), value));
+    auto cvtIntr = value.getType().isFloat8E4M3FN()
+                       ? "llvm.nvvm.e4m3x2.to.f16x2.rn"
+                       : "llvm.nvvm.e5m2x2.to.f16x2.rn";
+    mlir::FloatType f16_ty = b.getF16Type();
+    auto cvtOp = b.create<ml::CallIntrinsicOp>(
+        ml::getFixedVectorType(f16_ty, 2), cvtIntr, mlir::ValueRange{input});
+    Value res = b.create<ml::ExtractElementOp>(
+        cvtOp.getResults(), b.create<ma::ConstantIntOp>(0, 8));
+    if (to_ty.getWidth() > f16_ty.getWidth()) {
+      res = b.create<ma::ExtFOp>(to_ty, res);
+    } else if (to_ty != f16_ty) {
+      if (to_ty == b.getBF16Type()) {
+        res = b.create<ma::ExtFOp>(b.getF32Type(), res);
+      }
+      res = b.create<ma::TruncFOp>(to_ty, res);
+    }
+    return res;
+  }
+
+  bool allow_intrinsics;
 };
 
 // Lowering for cmpf : f8 for float to pred conversions.
@@ -627,11 +778,12 @@ class ExpandFloatOpsPass
   using ExpandFloatOpsPassBase::ExpandFloatOpsPassBase;
   void runOnOperation() override {
     mlir::RewritePatternSet patterns(&getContext());
-    patterns.add<RewriteTruncFPattern, RewriteExtFPattern, RewriteAbsFPattern,
-                 RewriteF8Cst, RewriteIToFpPattern<ma::SIToFPOp>,
-                 RewriteIToFpPattern<ma::UIToFPOp>,
-                 RewriteFpToIPattern<ma::FPToSIOp>,
-                 RewriteFpToIPattern<ma::FPToUIOp>>(&getContext());
+    patterns.add<RewriteTruncFPattern, RewriteExtFPattern>(
+        &getContext(), /*allow_intrinsics=*/has_f8_cvt_);
+    patterns.add<
+        RewriteAbsFPattern, RewriteF8Cst, RewriteIToFpPattern<ma::SIToFPOp>,
+        RewriteIToFpPattern<ma::UIToFPOp>, RewriteFpToIPattern<ma::FPToSIOp>,
+        RewriteFpToIPattern<ma::FPToUIOp>>(&getContext());
     mlir::populatePolynomialApproximateTanhPattern(patterns);
     patterns.add<RewriteErf32Pattern>(&getContext());
     if (mlir::failed(mlir::applyPatternsAndFoldGreedily(getOperation(),
@@ -643,8 +795,10 @@ class ExpandFloatOpsPass
 
 }  // namespace
 
-std::unique_ptr<mlir::Pass> CreateExpandFloatOpsPass(bool pre_ampere) {
-  return createExpandFloatOpsPass(ExpandFloatOpsPassOptions{pre_ampere});
+std::unique_ptr<mlir::Pass> CreateExpandFloatOpsPass(bool pre_ampere,
+                                                     bool has_f8_cvt) {
+  return createExpandFloatOpsPass(
+      ExpandFloatOpsPassOptions{pre_ampere, has_f8_cvt});
 }
 
 }  // namespace gpu
