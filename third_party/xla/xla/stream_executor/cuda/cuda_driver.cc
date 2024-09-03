@@ -64,6 +64,25 @@ namespace gpu {
 
 namespace {
 
+// Returns the device associated with the given context.
+absl::StatusOr<CUdevice> DeviceFromContext(GpuContext* context) {
+  ScopedActivateContext activated{context};
+  CUdevice device = -1;
+  auto status = cuda::ToStatus(cuCtxGetDevice(&device));
+  if (status.ok()) {
+    return device;
+  }
+
+  return status;
+}
+
+CUcontext CurrentContextOrDie() {
+  CUcontext current = nullptr;
+  TF_CHECK_OK(cuda::ToStatus(cuCtxGetCurrent(&current),
+                             "Failed to query current context"));
+  return current;
+}
+
 // Returns the singleton ContextMap.
 ContextMap<CUcontext, GpuContext>* GetContextMap() {
   static ContextMap<CUcontext, GpuContext>* context_map =
@@ -86,7 +105,7 @@ ContextMap<CUcontext, GpuContext>* GetContextMap() {
 // created by StreamExecutor (to ensure that the CUDA runtime didn't create a
 // context behind our backs).
 CUcontext CurrentContext() {
-  CUcontext current = cuda::CurrentContextOrDie();
+  CUcontext current = CurrentContextOrDie();
   if (current != nullptr && !GetContextMap()->Has(current)) {
     LOG(FATAL) << "current context was not created by the StreamExecutor "
                   "cuda_driver API: "
@@ -265,7 +284,7 @@ absl::Status GpuDriver::CreateContext(int device_ordinal, CUdevice device,
     }
   }
 
-  CUcontext former_context = cuda::CurrentContextOrDie();
+  CUcontext former_context = CurrentContextOrDie();
   CUcontext new_context;
   TF_RETURN_IF_ERROR(
       cuda::ToStatus(cuDevicePrimaryCtxRetain(&new_context, device)));
@@ -1316,17 +1335,6 @@ void GpuDriver::UnloadModule(GpuContext* context, CUmodule module) {
   }
 }
 
-absl::StatusOr<CUdevice> GpuDriver::DeviceFromContext(GpuContext* context) {
-  ScopedActivateContext activated{context};
-  CUdevice device = -1;
-  auto status = cuda::ToStatus(cuCtxGetDevice(&device));
-  if (status.ok()) {
-    return device;
-  }
-
-  return status;
-}
-
 bool GpuDriver::CreateStream(GpuContext* context, CUstream* stream,
                              int priority) {
   ScopedActivateContext activated{context};
@@ -2009,14 +2017,4 @@ absl::StatusOr<int> GpuDriver::GetMaxOccupiedBlocksPerCore(
 }
 
 }  // namespace gpu
-
-namespace cuda {
-CUcontext CurrentContextOrDie() {
-  CUcontext current = nullptr;
-  TF_CHECK_OK(cuda::ToStatus(cuCtxGetCurrent(&current),
-                             "Failed to query current context"));
-  return current;
-}
-
-}  // namespace cuda
 }  // namespace stream_executor
