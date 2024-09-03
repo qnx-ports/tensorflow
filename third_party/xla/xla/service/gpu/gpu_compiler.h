@@ -157,8 +157,8 @@ class GpuCompiler : public LLVMCompiler {
     return absl::OkStatus();
   }
 
-  // Add autotuning passes for GEMM fusions.
-  virtual absl::Status AddGemmFusionAutotuningPasses(
+  // Add autotuning passes for Triton fusions.
+  virtual absl::Status AddTritonFusionAutotuningPasses(
       HloPassPipeline* pipeline, HloModule* hlo_module,
       AutotuneConfig& autotune_config, tsl::thread::ThreadPool* thread_pool,
       const MultiProcessKeyValueStore& key_value_store) {

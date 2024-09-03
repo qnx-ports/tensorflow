@@ -1525,9 +1525,9 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
   // f32).
   add_float_normalization(pipeline);
 
-  TF_RETURN_IF_ERROR(AddGemmFusionAutotuningPasses(&pipeline, hlo_module,
-                                                   autotune_config, thread_pool,
-                                                   options.key_value_store));
+  TF_RETURN_IF_ERROR(
+      AddTritonFusionAutotuningPasses(&pipeline, hlo_module, autotune_config,
+                                      thread_pool, options.key_value_store));
   // Inline back the calls which have better performance with cuBLAS.
   pipeline.AddPass<CallInliner>();
   // TODO(tdanyluk): Apply CublasPadForGemms to the cuBLAS GEMMs generated

@@ -26,9 +26,9 @@ package_group(
 )
 
 cc_library(
-    name = "gemm_fusion_autotuner",
-    srcs = ["gemm_fusion_autotuner.cc"],
-    hdrs = ["gemm_fusion_autotuner.h"],
+    name = "triton_fusion_autotuner",
+    srcs = ["triton_fusion_autotuner.cc"],
+    hdrs = ["triton_fusion_autotuner.h"],
     tags = [
         "gpu",
         "no_rocm",
@@ -49,6 +49,8 @@ cc_library(
         "//xla/service:dump",
         "//xla/service:executable",
         "//xla/service:float_normalization",
+        "//xla/service:hlo_cost_analysis",
+        "//xla/service:hlo_graph_dumper",
         "//xla/service:hlo_module_config",
         "//xla/service:hlo_pass",
         "//xla/service:shaped_buffer",
@@ -60,11 +62,9 @@ cc_library(
         "//xla/service/gpu:matmul_utils",
         "//xla/service/gpu:split_k_gemm_rewriter",
         "//xla/service/gpu:stream_executor_util",
-        "//xla/service/gpu/model:gpu_hlo_cost_analysis",
         "//xla/service/gpu/transforms:cudnn_fusion_compiler",
         "//xla/service/gpu/transforms:fusion_wrapper",
         "//xla/service/gpu/transforms:gemm_rewriter",
-        "//xla/service/gpu/transforms:instruction_fusion",
         "//xla/service/gpu/transforms:priority_fusion",
         "//xla/stream_executor",
         "//xla/stream_executor:device_description",
@@ -99,9 +99,9 @@ cc_library(
 )
 
 xla_test(
-    name = "gemm_fusion_autotuner_test",
+    name = "triton_fusion_autotuner_test",
     timeout = "long",
-    srcs = ["gemm_fusion_autotuner_test.cc"],
+    srcs = ["triton_fusion_autotuner_test.cc"],
     backends = [
         "gpu_a100",
         "gpu_h100",
@@ -113,7 +113,7 @@ xla_test(
     deps = [
         ":autotuner_compile_util",
         ":autotuner_util",
-        ":gemm_fusion_autotuner",
+        ":triton_fusion_autotuner",
         "//xla:autotuning_proto_cc",
         "//xla:error_spec",
         "//xla:xla_data_proto_cc",

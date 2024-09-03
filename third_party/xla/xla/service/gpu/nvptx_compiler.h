@@ -76,7 +76,7 @@ class NVPTXCompiler : public GpuCompiler {
       AutotuneConfig& autotune_config,
       tsl::thread::ThreadPool* thread_pool) override;
 
-  absl::Status AddGemmFusionAutotuningPasses(
+  absl::Status AddTritonFusionAutotuningPasses(
       HloPassPipeline* pipeline, HloModule* hlo_module,
       AutotuneConfig& autotune_config, tsl::thread::ThreadPool* thread_pool,
       const MultiProcessKeyValueStore& key_value_store) override;

@@ -12,8 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#ifndef XLA_SERVICE_GPU_AUTOTUNING_GEMM_FUSION_AUTOTUNER_H_
-#define XLA_SERVICE_GPU_AUTOTUNING_GEMM_FUSION_AUTOTUNER_H_
+#ifndef XLA_SERVICE_GPU_AUTOTUNING_TRITON_FUSION_AUTOTUNER_H_
+#define XLA_SERVICE_GPU_AUTOTUNING_TRITON_FUSION_AUTOTUNER_H_
 
 #include <cstdint>
 #include <memory>
@@ -45,19 +45,29 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-// Find best tiling configuration for each triton fusion outlined.
-class GemmFusionAutotuner : public HloModulePass {
+// Takes a Triton fusion and chooses between cuBLAS, cuDNN, and Triton backends
+// for matrix multiplications. In the case of Triton, it also chooses the best
+// tiling configuration.
+//
+// This pass uses three steps:
+// 1. Generate all possible configs for each dot operation in the fusion.
+// 2. Compile all the configs and profile them.
+// 3. Rewrite HLO to use the best config.
+//
+// Note: this pass does not rewrite the fusion to use cuBLAS or cuDNN. This is
+// done in a separate pass.
+class TritonFusionAutotuner : public HloModulePass {
  public:
-  explicit GemmFusionAutotuner(const AutotuneConfig& config,
-                               const int32_t toolkit_version,
-                               tsl::thread::ThreadPool* thread_pool,
-                               const MultiProcessKeyValueStore& key_value_store)
+  explicit TritonFusionAutotuner(
+      const AutotuneConfig& config, const int32_t toolkit_version,
+      tsl::thread::ThreadPool* thread_pool,
+      const MultiProcessKeyValueStore& key_value_store)
       : config_(config),
         toolkit_version_(toolkit_version),
         thread_pool_(thread_pool),
         key_value_store_(key_value_store) {}
 
-  absl::string_view name() const override { return "triton-autotuner"; }
+  absl::string_view name() const override { return "triton-fusion-autotuner"; }
 
   using HloPassInterface::Run;
   absl::StatusOr<bool> Run(
@@ -71,13 +81,12 @@ class GemmFusionAutotuner : public HloModulePass {
   MultiProcessKeyValueStore key_value_store_;
 };
 
-// Autotuner implementation.
-class GemmFusionAutotunerImpl {
+class TritonFusionAutotunerImpl {
  public:
-  GemmFusionAutotunerImpl(const AutotuneConfig config,
-                          const int32_t toolkit_version,
-                          const DebugOptions debug_options,
-                          tsl::thread::ThreadPool* thread_pool)
+  TritonFusionAutotunerImpl(const AutotuneConfig config,
+                            const int32_t toolkit_version,
+                            const DebugOptions debug_options,
+                            tsl::thread::ThreadPool* thread_pool)
       : config_(std::move(config)),
         toolkit_version_(toolkit_version),
         debug_options_(std::move(debug_options)),
@@ -90,17 +99,18 @@ class GemmFusionAutotunerImpl {
     int64_t plan_id;
     bool operator<(const CuDnnConfig& other) const;
   };
-  using Config = std::variant<CuBlasConfig, CuDnnConfig, TritonGemmConfig>;
-  using TilingConfigs =
-      std::vector<std::pair<const HloFusionInstruction*, std::vector<Config>>>;
+  using BackendConfig =
+      std::variant<CuBlasConfig, CuDnnConfig, TritonGemmConfig>;
+  using BackendConfigs = std::vector<
+      std::pair<const HloFusionInstruction*, std::vector<BackendConfig>>>;
 
   struct ExecutableCandidate {
-    Config config;
+    BackendConfig config;
     std::unique_ptr<Executable> executable;
   };
 
   // Generate all possible configs for a dot operation.
-  absl::StatusOr<std::vector<Config>> GenerateConfigs(
+  absl::StatusOr<std::vector<BackendConfig>> GenerateConfigs(
       const HloFusionInstruction& fusion);
   absl::StatusOr<std::vector<TritonGemmConfig>> GenerateTritonConfigs(
       const HloDotInstruction& dot);
@@ -108,7 +118,7 @@ class GemmFusionAutotunerImpl {
   // Compile all executables for all fusions.
   absl::StatusOr<absl::flat_hash_map<const HloFusionInstruction*,
                                      std::vector<ExecutableCandidate>>>
-  CompileAll(AutotunerCompileUtil& compile_util, const TilingConfigs& task);
+  CompileAll(AutotunerCompileUtil& compile_util, const BackendConfigs& task);
 
   // Profile all executables for a fusion.
   absl::StatusOr<std::vector<AutotuneResult>> Profile(
@@ -117,13 +127,14 @@ class GemmFusionAutotunerImpl {
 
   // Autotune and save the results to the autotuning cache.
   absl::Status Autotune(
-      AutotunerCompileUtil& compile_util, const TilingConfigs& gemm_config_sets,
+      AutotunerCompileUtil& compile_util,
+      const BackendConfigs& gemm_config_sets,
       absl::flat_hash_map<AutotuneCacheKey, uint64_t> fusion_count_map);
 
   // Helper methods.
   const AutotuneConfig& GetConfig() const { return config_; }
   bool IsAutotuningEnabled() const;
-  static std::string ToString(const Config& config);
+  static std::string ToString(const BackendConfig& config);
 
  private:
   se::CudaComputeCapability GetComputeCapability() const {
@@ -144,4 +155,4 @@ class GemmFusionAutotunerImpl {
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_AUTOTUNING_GEMM_FUSION_AUTOTUNER_H_
+#endif  // XLA_SERVICE_GPU_AUTOTUNING_TRITON_FUSION_AUTOTUNER_H_

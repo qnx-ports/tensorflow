@@ -56,7 +56,7 @@ limitations under the License.
 #include "xla/service/gpu/autotuning/autotuner_util.h"
 #include "xla/service/gpu/autotuning/conv_algorithm_picker.h"
 #include "xla/service/gpu/autotuning/gemm_algorithm_picker.h"
-#include "xla/service/gpu/autotuning/gemm_fusion_autotuner.h"
+#include "xla/service/gpu/autotuning/triton_fusion_autotuner.h"
 #include "xla/service/gpu/buffer_sharing.h"
 #include "xla/service/gpu/cublas_padding_requirements.h"
 #include "xla/service/gpu/gpu_asm_opts_util.h"
@@ -378,12 +378,12 @@ absl::Status NVPTXCompiler::AddConvAndGemmAutotuningPasses(
   return absl::OkStatus();
 }
 
-absl::Status NVPTXCompiler::AddGemmFusionAutotuningPasses(
+absl::Status NVPTXCompiler::AddTritonFusionAutotuningPasses(
     HloPassPipeline* pipeline, HloModule* hlo_module,
     AutotuneConfig& autotune_config, tsl::thread::ThreadPool* thread_pool,
     const MultiProcessKeyValueStore& key_value_store) {
-  pipeline->AddPass<GemmFusionAutotuner>(autotune_config, GetToolkitVersion(),
-                                         thread_pool, key_value_store);
+  pipeline->AddPass<TritonFusionAutotuner>(autotune_config, GetToolkitVersion(),
+                                           thread_pool, key_value_store);
   return absl::OkStatus();
 }
 

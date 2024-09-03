@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "xla/service/gpu/autotuning/gemm_fusion_autotuner.h"
+#include "xla/service/gpu/autotuning/triton_fusion_autotuner.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -172,7 +172,7 @@ class StatelessAutotunerTest : public HloTestBase {
   }
 };
 
-class GemmFusionAutotunerTest : public StatelessAutotunerTest {
+class TritonFusionAutotunerTest : public StatelessAutotunerTest {
  public:
   DebugOptions GetDebugOptionsForTest() override {
     DebugOptions debug_options =
@@ -201,7 +201,7 @@ class GemmFusionAutotunerTest : public StatelessAutotunerTest {
                                         tsl::port::MaxParallelism());
     DebugOptions opts;
     MultiProcessKeyValueStore key_value_store;
-    pipeline.AddPass<GemmFusionAutotuner>(
+    pipeline.AddPass<TritonFusionAutotuner>(
         AutotuneConfig{DeviceConfig{backend().default_stream_executor(),
                                     backend().memory_allocator()},
                        opts},
@@ -230,12 +230,12 @@ class GemmFusionAutotunerTest : public StatelessAutotunerTest {
   }
 };
 
-class GemmFusionAutotunerTestWithMorePreciseReduction
-    : public GemmFusionAutotunerTest {
+class TritonFusionAutotunerTestWithMorePreciseReduction
+    : public TritonFusionAutotunerTest {
  public:
   DebugOptions GetDebugOptionsForTest() override {
     DebugOptions debug_options =
-        GemmFusionAutotunerTest::GetDebugOptionsForTest();
+        TritonFusionAutotunerTest::GetDebugOptionsForTest();
     debug_options.set_xla_gpu_triton_gemm_disable_reduced_precision_reduction(
         true);
     return debug_options;
@@ -252,12 +252,12 @@ absl::StatusOr<std::vector<TritonGemmConfig>> GetPossibleMatmulAutotuneConfigs(
   ccc->set_minor(compute_capability.minor);
   DevicelessConfig test_config{se::DeviceDescription{deviceless_proto}};
   AutotuneConfig autotune_config{test_config, debug_options};
-  GemmFusionAutotunerImpl autotuner(autotune_config, toolkit_version,
-                                    debug_options, nullptr);
+  TritonFusionAutotunerImpl autotuner(autotune_config, toolkit_version,
+                                      debug_options, nullptr);
   return autotuner.GenerateTritonConfigs(dot);
 }
 
-TEST_F(GemmFusionAutotunerTest, AmpereUsesMoreThanTwoStages) {
+TEST_F(TritonFusionAutotunerTest, AmpereUsesMoreThanTwoStages) {
   std::unique_ptr<VerifiedHloModule> module = ParseAndReturnVerifiedModule(R"(
 ENTRY e {
   p0 = f32[1024,1024] parameter(0)
@@ -279,7 +279,7 @@ ENTRY e {
       [](const TritonGemmConfig& config) { return config.num_stages > 2; }));
 }
 
-TEST_F(GemmFusionAutotunerTest, SmallOutputCanUseLargeSplitK) {
+TEST_F(TritonFusionAutotunerTest, SmallOutputCanUseLargeSplitK) {
   std::unique_ptr<VerifiedHloModule> module = ParseAndReturnVerifiedModule(R"(
 ENTRY e {
   p0 = f32[1024,1024] parameter(0)
@@ -301,7 +301,7 @@ ENTRY e {
       [](const TritonGemmConfig& config) { return config.split_k >= 4; }));
 }
 
-TEST_F(GemmFusionAutotunerTest, LargeOutputDoesNotUseLargeSplitK) {
+TEST_F(TritonFusionAutotunerTest, LargeOutputDoesNotUseLargeSplitK) {
   std::unique_ptr<VerifiedHloModule> module = ParseAndReturnVerifiedModule(R"(
 ENTRY e {
   p0 = f32[20480,20480] parameter(0)
@@ -323,7 +323,7 @@ ENTRY e {
       [](const TritonGemmConfig& config) { return config.split_k > 1; }));
 }
 
-TEST_F(GemmFusionAutotunerTest, Int8FusedGemm) {
+TEST_F(TritonFusionAutotunerTest, Int8FusedGemm) {
   const std::string hlo = R"(
 HloModule module
 
@@ -346,7 +346,7 @@ ENTRY e {
   EXPECT_TRUE(RunAndCompare(hlo, ErrorSpec{/*aabs=*/5e-3, /*arel=*/5e-3}));
 }
 
-TEST_F(GemmFusionAutotunerTest, Int8FusedGemm256) {
+TEST_F(TritonFusionAutotunerTest, Int8FusedGemm256) {
   const std::string hlo = R"(
 HloModule module
 
@@ -370,7 +370,7 @@ ENTRY e {
   EXPECT_TRUE(RunAndCompare(hlo, ErrorSpec{/*aabs=*/1e-2, /*arel=*/1e-2}));
 }
 
-TEST_F(GemmFusionAutotunerTest, SelectsSplitK) {
+TEST_F(TritonFusionAutotunerTest, SelectsSplitK) {
   // Shapes with K >> M, N have to force split-K configurations.
   const std::string kHloText = R"(
 HloModule t
@@ -395,7 +395,7 @@ ENTRY e {
   EXPECT_TRUE(RunAndCompare(kHloText, ErrorSpec{/*aabs=*/1, /*arel=*/0.5}));
 }
 
-TEST_F(GemmFusionAutotunerTestWithMorePreciseReduction, SelectsSplitK) {
+TEST_F(TritonFusionAutotunerTestWithMorePreciseReduction, SelectsSplitK) {
   // Shapes with K >> M, N have to force split-K configurations.
   constexpr absl::string_view kHloText = R"(
 HloModule t
@@ -420,7 +420,7 @@ ENTRY e {
   EXPECT_TRUE(RunAndCompare(kHloText, ErrorSpec{/*aabs=*/1e-2, /*arel=*/1e-3}));
 }
 
-TEST_F(GemmFusionAutotunerTest, ApplySplitKWithoutAlteringTiling) {
+TEST_F(TritonFusionAutotunerTest, ApplySplitKWithoutAlteringTiling) {
   const std::string kHloText = R"(
 triton_dot {
   p0 = f16[55,120] parameter(0)
@@ -447,7 +447,7 @@ ENTRY e {
 
 // Modify block_k back to 16 once b/337839570 is fixed.
 // TODO(b/344770374): Make this test not fragile.
-TEST_F(GemmFusionAutotunerTest, DoNotRunAutotuningKernelSpillingRegisters) {
+TEST_F(TritonFusionAutotunerTest, DoNotRunAutotuningKernelSpillingRegisters) {
   const std::string kHloText = R"(
 HloModule m
 
@@ -489,7 +489,7 @@ ENTRY %e {
 
 // Modify block_k back to 16 once b/337839570 is fixed.
 // TODO(b/344770374): Make this test not fragile.
-TEST_F(GemmFusionAutotunerTest,
+TEST_F(TritonFusionAutotunerTest,
        DoNotFilterOutAutotuningKernelSpillingRegisters) {
   if (GetCudaComputeCapability().IsAtLeastHopper()) {
     GTEST_SKIP() << "Hopper and newer runs out of registers for such HLOs";
@@ -534,7 +534,7 @@ ENTRY %e {
 }
 
 // Modify block_k back to 16 once b/337839570 is fixed.
-TEST_F(GemmFusionAutotunerTest, RunAutotuningKernelNotSpillingRegisters) {
+TEST_F(TritonFusionAutotunerTest, RunAutotuningKernelNotSpillingRegisters) {
   const std::string kHloText = R"(
 HloModule m
 
@@ -565,9 +565,9 @@ ENTRY %e {
   EXPECT_NE(executable, nullptr);
 }
 
-using GemmFusionAutotunerDumpTest = GemmFusionAutotunerTest;
+using TritonFusionAutotunerDumpTest = TritonFusionAutotunerTest;
 
-TEST_F(GemmFusionAutotunerDumpTest, Fp8CublasltFallbackSupport) {
+TEST_F(TritonFusionAutotunerDumpTest, Fp8CublasltFallbackSupport) {
   const std::string kHloText = R"(
 HloModule o
 
@@ -615,8 +615,8 @@ ENTRY main {
   tsl::thread::ThreadPool thread_pool(tsl::Env::Default(), "",
                                       tsl::port::MaxParallelism());
   MultiProcessKeyValueStore key_value_store;
-  pipeline.AddPass<GemmFusionAutotuner>(autotune_config, GetToolkitVersion(),
-                                        &thread_pool, key_value_store);
+  pipeline.AddPass<TritonFusionAutotuner>(autotune_config, GetToolkitVersion(),
+                                          &thread_pool, key_value_store);
   pipeline.AddPass<CallInliner>();
   for (GemmRewriterOptions::DType dtype :
        {GemmRewriterOptions::DType::kFp8Only,
@@ -641,7 +641,7 @@ ENTRY main {
   EXPECT_TRUE(filecheck_matches);
 }
 
-TEST_F(GemmFusionAutotunerDumpTest, DumpingWorks) {
+TEST_F(TritonFusionAutotunerDumpTest, DumpingWorks) {
   HloModuleConfig config;
   DebugOptions options = GetDebugOptionsForTest();
   options.set_xla_gpu_cublas_fallback(true);
@@ -706,7 +706,7 @@ CHECK: cublas
 )"));
 }
 
-TEST_F(GemmFusionAutotunerTest, AutotuneCuDnnFusion) {
+TEST_F(TritonFusionAutotunerTest, AutotuneCuDnnFusion) {
   const std::string kHlo = R"(
 fusion1 {
   p0 = f32[3,28,32] parameter(0)
@@ -731,8 +731,9 @@ ENTRY e {
 // TODO(b/281489442): Write a testcase called
 // `SkipConfigsProducingDeviantResults` or similar.
 
-class GemmFusionAutotunerLevelTest : public StatelessAutotunerTest,
-                                     public ::testing::WithParamInterface<int> {
+class TritonFusionAutotunerLevelTest
+    : public StatelessAutotunerTest,
+      public ::testing::WithParamInterface<int> {
  public:
   DebugOptions GetDebugOptionsForTest() override {
     DebugOptions debug_options =
@@ -743,7 +744,7 @@ class GemmFusionAutotunerLevelTest : public StatelessAutotunerTest,
   }
 };
 
-TEST_P(GemmFusionAutotunerLevelTest, AllAutotuningLevelsWorkCorrectly) {
+TEST_P(TritonFusionAutotunerLevelTest, AllAutotuningLevelsWorkCorrectly) {
   const std::string kHloText = R"(
 HloModule m
 
@@ -763,7 +764,7 @@ ENTRY e {
   EXPECT_TRUE(RunAndCompare(kHloText, ErrorSpec{/*aabs=*/1e-3, /*arel=*/1e-3}));
 }
 
-TEST_P(GemmFusionAutotunerLevelTest, Deviceless) {
+TEST_P(TritonFusionAutotunerLevelTest, Deviceless) {
   const std::string hlo = R"(
 HloModule module
 
@@ -784,7 +785,7 @@ ENTRY e {
                                       tsl::port::MaxParallelism());
   DebugOptions opts;
   MultiProcessKeyValueStore key_value_store;
-  pipeline.AddPass<GemmFusionAutotuner>(
+  pipeline.AddPass<TritonFusionAutotuner>(
       AutotuneConfig{
           DevicelessConfig{
               backend().default_stream_executor()->GetDeviceDescription()},
@@ -816,20 +817,21 @@ ENTRY e {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(GemmFusionAutotunerLevelSweep,
-                         GemmFusionAutotunerLevelTest, ::testing::Range(0, 5));
+INSTANTIATE_TEST_SUITE_P(TritonFusionAutotunerLevelSweep,
+                         TritonFusionAutotunerLevelTest,
+                         ::testing::Range(0, 5));
 
-class GemmFusionAutotunerExhaustiveTest : public GemmFusionAutotunerTest {
+class TritonFusionAutotunerExhaustiveTest : public TritonFusionAutotunerTest {
  public:
   DebugOptions GetDebugOptionsForTest() override {
     DebugOptions debug_options =
-        GemmFusionAutotunerTest::GetDebugOptionsForTest();
+        TritonFusionAutotunerTest::GetDebugOptionsForTest();
     debug_options.set_xla_gpu_exhaustive_tiling_search(true);
     return debug_options;
   }
 };
 
-TEST_F(GemmFusionAutotunerExhaustiveTest, DISABLED_CompileOnly) {
+TEST_F(TritonFusionAutotunerExhaustiveTest, DISABLED_CompileOnly) {
   const std::string hlo = R"(
 HloModule module
 
@@ -853,7 +855,7 @@ ENTRY e {
 // on small block_k values depending on the bit-width of the inputs to the
 // dot. For this test case, it should skip any block_k values that are <= 16
 // since the smallest type has a bit-width of 8.
-TEST_F(GemmFusionAutotunerExhaustiveTest, SkipsCrashingTileKConfig) {
+TEST_F(TritonFusionAutotunerExhaustiveTest, SkipsCrashingTileKConfig) {
   std::unique_ptr<VerifiedHloModule> module = ParseAndReturnVerifiedModule(R"(
 HloModule module
 ENTRY e {
@@ -877,17 +879,17 @@ ENTRY e {
       [](const TritonGemmConfig& config) { return config.block_k > 16; }));
 }
 
-class GemmFusionAutotunerDisableSplitK : public GemmFusionAutotunerTest {
+class TritonFusionAutotunerDisableSplitK : public TritonFusionAutotunerTest {
  public:
   DebugOptions GetDebugOptionsForTest() override {
     DebugOptions debug_options =
-        GemmFusionAutotunerTest::GetDebugOptionsForTest();
+        TritonFusionAutotunerTest::GetDebugOptionsForTest();
     debug_options.set_xla_gpu_enable_split_k_autotuning(false);
     return debug_options;
   }
 };
 
-TEST_F(GemmFusionAutotunerDisableSplitK, SplitKIsDisabled) {
+TEST_F(TritonFusionAutotunerDisableSplitK, SplitKIsDisabled) {
   std::unique_ptr<VerifiedHloModule> module = ParseAndReturnVerifiedModule(R"(
 ENTRY e {
   p0 = f32[1024,1024] parameter(0)
@@ -909,11 +911,11 @@ ENTRY e {
       [](const TritonGemmConfig& config) { return config.split_k == 1; }));
 }
 
-class GemmFusionAutotunerConfigTest
+class TritonFusionAutotunerConfigTest
     : public StatelessAutotunerTest,
       public ::testing::WithParamInterface<bool> {};
 
-TEST_P(GemmFusionAutotunerConfigTest, SparseDotDiscardsUnsupportedTiles) {
+TEST_P(TritonFusionAutotunerConfigTest, SparseDotDiscardsUnsupportedTiles) {
   const std::string kHloText = R"(
 HloModule test
 ENTRY wais {
@@ -942,10 +944,10 @@ ENTRY wais {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(GemmFusionAutotunerConfigSweep,
-                         GemmFusionAutotunerConfigTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(TritonFusionAutotunerConfigSweep,
+                         TritonFusionAutotunerConfigTest, ::testing::Bool());
 
-TEST_F(GemmFusionAutotunerTest, SplitKFLoatNormalization) {
+TEST_F(TritonFusionAutotunerTest, SplitKFLoatNormalization) {
   if (!GetCudaComputeCapability().IsAtLeastHopper()) {
     GTEST_SKIP() << "f8 types are only supported from Hopper onwards.";
   }
@@ -958,8 +960,8 @@ TEST_F(GemmFusionAutotunerTest, SplitKFLoatNormalization) {
   DeviceConfig test_config{backend().default_stream_executor(),
                            backend().memory_allocator()};
   AutotuneConfig autotune_config{test_config, GetDebugOptionsForTest()};
-  GemmFusionAutotunerImpl autotuner(autotune_config, GetToolkitVersion(),
-                                    GetDebugOptionsForTest(), nullptr);
+  TritonFusionAutotunerImpl autotuner(autotune_config, GetToolkitVersion(),
+                                      GetDebugOptionsForTest(), nullptr);
   TF_ASSERT_OK_AND_ASSIGN(
       auto compile_util,
       AutotunerCompileUtil::Create(autotune_config, GetDebugOptionsForTest()))
@@ -979,18 +981,19 @@ ENTRY entry {
   ROOT r = f8e5m2[256,128]{1,0} fusion(f8e5m2[256,256]{1,0} %p0, f8e4m3fn[128,256]{1,0} %p1), kind=kCustom, calls=%gemm_fusion_dot_computation, backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"fusion_backend_config":{"kind":"__triton_gemm"},"force_earliest_schedule":false}
 })")
                                                   .value();
-  GemmFusionAutotunerImpl::TilingConfigs configs;
-  configs.emplace_back(DynCast<HloFusionInstruction>(
-                           module->entry_computation()->root_instruction()),
-                       std::vector<GemmFusionAutotunerImpl::Config>{
-                           GemmFusionAutotunerImpl::Config(TritonGemmConfig(
-                               /*block_m=*/32,
-                               /*block_n=*/64,
-                               /*block_k=*/64,
-                               /*split_k=*/4,
-                               /*num_stages=*/1,
-                               /*num_warps=*/4,
-                               /*num_ctas=*/1))});
+  TritonFusionAutotunerImpl::BackendConfigs configs;
+  configs.emplace_back(
+      DynCast<HloFusionInstruction>(
+          module->entry_computation()->root_instruction()),
+      std::vector<TritonFusionAutotunerImpl::BackendConfig>{
+          TritonFusionAutotunerImpl::BackendConfig(TritonGemmConfig(
+              /*block_m=*/32,
+              /*block_n=*/64,
+              /*block_k=*/64,
+              /*split_k=*/4,
+              /*num_stages=*/1,
+              /*num_warps=*/4,
+              /*num_ctas=*/1))});
   CHECK_OK(autotuner.CompileAll(*compile_util, configs));
 }
 
