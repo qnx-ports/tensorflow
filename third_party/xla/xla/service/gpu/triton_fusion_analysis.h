@@ -43,6 +43,9 @@ class TritonFusionAnalysis {
   static absl::StatusOr<TritonFusionAnalysis> Execute(
       const HloComputation& computation, int split_k = 1);
 
+  static absl::StatusOr<TritonFusionAnalysis> Execute(const HloInstruction& dot,
+                                                      int split_k = 1);
+
   // Execute the analysis of a produce-consumer fusion. Returns absl::OkStatus,
   // if the analysis can find a valid tiling for the producer-consumer fusion.
   // `split_k` indicates whether this operation was converted to the split-K
@@ -85,6 +88,13 @@ class TritonFusionAnalysis {
   std::optional<Scope> QueryInstructionScope(const HloInstruction& hlo) const;
 
   std::string ToString() const;
+
+  // Returns an error if the batch dimension of the parameter with the type S4
+  // is the minor one. This check uses the collected data about the mapping the
+  // dimensions of dot to the corresponding parameters. This is important
+  // because there could be a transpose between the dot and the parameter.
+  absl::Status ValidateBatchDimForInt4Param(const HloInstruction& dot,
+                                            Scope scope) const;
 
  private:
   IterationSpecByInstructionByScopeMap iter_specs_;

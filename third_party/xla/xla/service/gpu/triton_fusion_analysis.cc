@@ -22,6 +22,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
@@ -147,6 +148,8 @@ bool FusionContext::CombineDimOrdersAndReqs(const DimOrdersAndReqs& update) {
   return true;
 }
 
+// Returns the list of parameters that are inputs to the given instruction.
+// Also updates the dimension orders and iteration specs for the parameters.
 absl::Status FusionContext::PropagateDimensionOrdersToParameters(
     const HloInstruction& origin, ConstHloInstructionSet& parameters,
     ConstHloInstructionMap<TensorIterationSpec>& iter_specs) {
@@ -213,6 +216,13 @@ absl::StatusOr<TritonFusionAnalysis> TritonFusionAnalysis::Execute(
   return analysis;
 }
 
+absl::StatusOr<TritonFusionAnalysis> TritonFusionAnalysis::Execute(
+    const HloInstruction& dot, int split_k) {
+  TritonFusionAnalysis analysis;
+  TF_RETURN_IF_ERROR(analysis.ExecuteForDotFusion(dot, split_k));
+  return analysis;
+}
+
 absl::Status TritonFusionAnalysis::ExecuteForProducerConsumer(
     const HloInstruction& producer, const HloInstruction& consumer,
     int split_k) {
@@ -246,6 +256,34 @@ absl::Status TritonFusionAnalysis::ExecuteForProducerConsumer(
   auto* fused_computation =
       fusion_instruction->fused_instructions_computation();
   return Execute(*fused_computation, split_k).status();
+}
+
+absl::Status TritonFusionAnalysis::ValidateBatchDimForInt4Param(
+    const HloInstruction& dot, Scope scope) const {
+  CHECK(scope == Scope::LHS || scope == Scope::RHS);
+  const auto& dims = dot.dot_dimension_numbers();
+  const auto& batch_dims = (scope == Scope::LHS) ? dims.lhs_batch_dimensions()
+                                                 : dims.rhs_batch_dimensions();
+
+  if (batch_dims.empty()) return absl::OkStatus();
+
+  int32_t batch_dim = batch_dims.Get(0);
+  const auto& params = parameters_.at(scope);
+  if (params.size() != 1) return absl::OkStatus();
+
+  const auto& param = *params.begin();
+  if (param->shape().element_type() != S4) return absl::OkStatus();
+
+  const auto& strides = IterSpec(scope, param, batch_dim);
+  // The hacky way to check if the batch dimension is minor.
+  // It also covers the case when the batch dimension is second to last but the
+  // minor dimension is equal to 1.
+  if (strides->at(0).stride == 1) {
+    return absl::FailedPreconditionError(
+        "Fusion is not possible because the parameter with the type S4 has "
+        "minor batch dimension.");
+  }
+  return absl::OkStatus();
 }
 
 absl::Status TritonFusionAnalysis::ExecuteForDotFusion(

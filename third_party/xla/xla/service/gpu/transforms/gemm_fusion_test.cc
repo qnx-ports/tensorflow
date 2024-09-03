@@ -1431,6 +1431,28 @@ CHECK-DAG: ROOT {{.*}} = f32[8,4]{1,0} fusion(s4[8,1024]{1,0} %lhs, f32[1024,4]{
 })");
 }
 
+TEST_F(SmallDotGemmFusionTest, Int4WithMinorBatchDimIsNotRewritten) {
+  const std::string kInt4Dot = R"(
+    ENTRY main {
+      lhs = s4[8,1024,16]{2,1,0} parameter(0)
+      lhs_converted = bf16[8,1024,16]{2,1,0} convert(lhs)
+      rhs = bf16[16,1024,4]{2,1,0} parameter(1)
+      ROOT dot = bf16[16,8,4]{2,1,0} dot(lhs_converted, rhs),
+        lhs_batch_dims={2},
+        lhs_contracting_dims={1},
+        rhs_batch_dims={0},
+        rhs_contracting_dims={1}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<VerifiedHloModule> module,
+                          ParseAndReturnVerifiedModule(kInt4Dot));
+
+  EXPECT_THAT(GemmFusion(gpu_version_).Run(module.get()),
+              tsl::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  ::testing::HasSubstr("S4 has minor batch dimension")));
+}
+
 }  // namespace
 }  // namespace gpu
 }  // namespace xla

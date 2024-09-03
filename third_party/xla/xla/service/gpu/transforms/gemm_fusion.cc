@@ -674,6 +674,15 @@ absl::StatusOr<FusionDecision> CreateDotFusion(
     return FusionDecision{};
   }
 
+  auto analysis_or = TritonFusionAnalysis::Execute(dot);
+  if (analysis_or.ok()) {
+    const auto& analysis = analysis_or.value();
+    TF_RETURN_IF_ERROR(analysis.ValidateBatchDimForInt4Param(
+        dot, TritonFusionAnalysis::Scope::LHS));
+    TF_RETURN_IF_ERROR(analysis.ValidateBatchDimForInt4Param(
+        dot, TritonFusionAnalysis::Scope::RHS));
+  }
+
   bool is_pure_matmul = true;
   (void)builder.ForEachInstruction([&](const HloInstruction* fused_hlo) {
     static constexpr std::array<HloOpcode, 4> kPureOpcodes = {

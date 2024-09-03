@@ -139,6 +139,26 @@ class TritonGemmTestWithoutTritonGemmAny : public TritonGemmTest {
   }
 };
 
+TEST_F(TritonTest, RHSInt4WithBatchAsMinorDim) {
+  const std::string kHloText = R"(
+    HloModule RHSInt4WithBatchAsMinorDim
+
+    ENTRY main {
+      parameter = bf16[16,1,4256]{2,1,0} parameter(0)
+      parameter.1 = s4[4256,8512,16]{2,1,0} parameter(1)
+      convert = bf16[4256,8512,16]{2,1,0} convert(parameter.1)
+      ROOT dot = bf16[16,1,8512]{2,1,0} dot(parameter,convert),
+          lhs_contracting_dims={2},
+          rhs_contracting_dims={0},
+          lhs_batch_dims={0},
+          rhs_batch_dims={2}
+    }
+  )";
+  // We do not fuse the hlo where the batch dimension of s4 is minor.
+  EXPECT_THAT(RunAndCompare(kHloText, ErrorSpec{/*aabs=*/1}).message(),
+              ::testing::HasSubstr("S4 has minor batch dimension"));
+}
+
 TEST_F(TritonGemmTest, LHSInt4WithMinorDimEqualTo1) {
   // We prove that triton can handle int4 dot with non contracting dim size
   // equal to 1.
