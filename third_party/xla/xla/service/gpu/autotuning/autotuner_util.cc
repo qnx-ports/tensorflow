@@ -80,6 +80,8 @@ using AutotuneCacheMap = absl::flat_hash_map<AutotuneCacheKey, AutotuneResult>;
 static absl::Mutex autotune_cache_mu(absl::kConstInit);
 static auto& autotune_cache ABSL_GUARDED_BY(autotune_cache_mu) =
     *new AutotuneCacheMap();
+static AutotunerUtil::CacheStats autotune_cache_stats
+    ABSL_GUARDED_BY(autotune_cache_mu);
 
 absl::StatusOr<std::string> GetBase64EncodedSha256Hash(absl::string_view s) {
   llvm::SHA256 sha256;
@@ -378,6 +380,12 @@ AutotuneCacheKey::AutotuneCacheKey(absl::string_view model_str,
 }
 
 namespace {
+void AddToCacheStats(int64_t hits, int64_t misses) {
+  absl::MutexLock lock(&autotune_cache_mu);
+  autotune_cache_stats.cache_hits += hits;
+  autotune_cache_stats.cache_misses += misses;
+}
+
 absl::StatusOr<std::optional<AutotuneResult>> TryFindInCache(
     const AutotuneCacheKey& key, absl::string_view cache_dir)
     ABSL_LOCKS_EXCLUDED(autotune_cache_mu) {
@@ -388,6 +396,7 @@ absl::StatusOr<std::optional<AutotuneResult>> TryFindInCache(
     } else if (VLOG_IS_ON(1)) {
       LOG(INFO) << "In-memory autotune cache hit";
     }
+    AddToCacheStats(/*hits=*/1, /*misses=*/0);
     return opt_result;
   }
 
@@ -401,6 +410,7 @@ absl::StatusOr<std::optional<AutotuneResult>> TryFindInCache(
     } else if (VLOG_IS_ON(1)) {
       LOG(INFO) << "File-based autotune cache hit";
     }
+    AddToCacheStats(/*hits=*/1, /*misses=*/0);
     return opt_result;
   }
 
@@ -409,6 +419,7 @@ absl::StatusOr<std::optional<AutotuneResult>> TryFindInCache(
   } else if (VLOG_IS_ON(1)) {
     LOG(INFO) << "Autotune cache miss";
   }
+  AddToCacheStats(/*hits=*/0, /*misses=*/1);
   return std::nullopt;
 }
 }  // namespace
@@ -565,6 +576,16 @@ AutotunerUtil::CreateRedzoneAllocator(const AutotuneConfig& config,
       /*redzone_size=*/config.should_check_correctness()
           ? opts.xla_gpu_redzone_padding_bytes()
           : 0);
+}
+
+/*static*/ AutotunerUtil::CacheStats AutotunerUtil::GetCacheStats() {
+  absl::MutexLock lock(&autotune_cache_mu);
+  return autotune_cache_stats;
+}
+
+/*static*/ void AutotunerUtil::ClearCacheStats() {
+  absl::MutexLock lock(&autotune_cache_mu);
+  autotune_cache_stats = CacheStats();
 }
 
 }  // namespace gpu
