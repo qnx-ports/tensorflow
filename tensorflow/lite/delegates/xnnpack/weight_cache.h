@@ -24,16 +24,8 @@ limitations under the License.
 
 #include "xnnpack.h"  // from @XNNPACK
 #include "tensorflow/lite/c/common.h"
+#include "tensorflow/lite/delegates/xnnpack/file_util.h"
 #include "tensorflow/lite/delegates/xnnpack/weight_cache_schema_generated.h"
-
-#if defined(__linux__) || defined(__ANDROID__)
-#ifndef TFLITE_XNNPACK_ENABLE_IN_MEMORY_WEIGHT_CACHE
-#include <sys/syscall.h>
-#ifdef SYS_memfd_create
-#define TFLITE_XNNPACK_ENABLE_IN_MEMORY_WEIGHT_CACHE 1
-#endif
-#endif
-#endif
 
 // WARNING: the interface in this file is still under experimentation and WILL
 // CHANGE. Do not rely on it.
@@ -98,74 +90,6 @@ struct BufferLocation {
     constexpr BufferLocation invalid = Invalid();
     return offset == invalid.offset && size == invalid.size;
   }
-};
-
-class FileDescriptor {
- public:
-  explicit FileDescriptor(int fd) : fd_(fd) {}
-
-  FileDescriptor() = default;
-
-  FileDescriptor(const FileDescriptor&) = delete;
-  FileDescriptor& operator=(const FileDescriptor&) = delete;
-
-  FileDescriptor(FileDescriptor&& other) : fd_(other.fd_) { other.fd_ = -1; }
-
-  FileDescriptor& operator=(FileDescriptor&& other) {
-    Close();
-    fd_ = other.fd_;
-    other.fd_ = -1;
-    return *this;
-  }
-
-  ~FileDescriptor() { Close(); }
-
-  // Checks that the file descriptor has a valid value.
-  //
-  // WARNING: this does not check that the descriptor points to an open file.
-  bool IsValid() const { return fd_ >= 0; }
-
-  // Returns the file descriptor value.
-  int Value() const { return fd_; }
-
-  // Closes the current file descriptor if needed and assigns the given value.
-  void Reset(int new_fd);
-
-  // Returns the cursor position in the current file.
-  //
-  // WARNING: the file descriptor must be valid and the file must be opened.
-  off_t GetPos() const;
-
-  // Sets the absolute cursor position in the current file.
-  //
-  // WARNING: the file descriptor must be valid and the file must be opened.
-  off_t SetPos(off_t position);
-
-  // Moves the cursor position by the given offset in the current file.
-  //
-  // WARNING: the file descriptor must be valid and the file must be opened.
-  off_t MovePos(off_t offset);
-
-  // Duplicates the current file descriptor and returns the new file descriptor.
-  FileDescriptor Duplicate() const;
-
-  // Closes the current file descriptor and set it to -1.
-  void Close();
-
-  // Returns the current file descriptor value and stops managing it.
-  int Release() {
-    const int fd = fd_;
-    fd_ = -1;
-    return fd;
-  }
-
-  friend void swap(FileDescriptor& f1, FileDescriptor& f2) {
-    using std::swap;
-    swap(f1.fd_, f2.fd_);
-  }
-
- private:
-  int fd_ = -1;
 };
 
 // Handles MMap allocations lifetime.
@@ -246,6 +170,20 @@ class WeightCacheBuilder {
   bool IsStarted() const {
     return fd_.IsValid();
   }
+
+  // Reopens the given file to add data to it.
+  //
+  // This should be only called from the weight cache provider.
+  //
+  // If `temporary_file_descriptor` is valid, then it will be used instead of
+  // reopening the given `path`.
+  //
+  // If this builder is not already started, `mmap_handle` is expected to be
+  // mapped to the file at `path` or linked to `temporary_file_descriptor`.
+  [[nodiscard /*Reopening the builder may fail.*/]]
+  bool ContinueBuild(const std::string& path,
+                     FileDescriptor temporary_file_descriptor,
+                     const MMapHandle& mmap_handle);
 
   // Resets the builder, discarding any data that hasn't been written.
   void Reset();
@@ -346,6 +284,9 @@ class MMapWeightCacheProvider {
   [[nodiscard /*Loading cache data may fail.*/]]
   bool Load();
 
+  [[nodiscard /*Updating cache data may fail.*/]]
+  bool ContinueBuild();
+
   // Creates the tensor map.
   void MapTensorIdentifiers(
       const TfLiteTensor* tensors, size_t size,
@@ -403,6 +344,10 @@ class MMapWeightCacheProvider {
 
   // Returns true if a file is mapped or a file path is set.
   bool IsActive() const { return IsFinalized() || !file_path_.empty(); };
+
+  // Returns true if this instance of the cache provider was the one to create
+  // the cache file.
+  bool CanContinueBuild() const { return building_run_; }
 
   // Returns the cache provider expected by XNNPack.
   xnn_weights_cache_provider& GetCacheProvider() { return cache_provider_; }
@@ -466,6 +411,13 @@ class MMapWeightCacheProvider {
 
   // Used to build the cache.
   WeightCacheBuilder builder_;
+
+  // True if the current run is the one building the cache file.
+  //
+  // We cannot distinguish between a wrong/outdated cache and one that is not
+  // fully done. To detect misuse, we still want to raise an error when XNNPack
+  // tries to append data to an existing file (i.e. when this is `false`).
+  bool building_run_ = false;
 };
 
 }  // namespace xnnpack

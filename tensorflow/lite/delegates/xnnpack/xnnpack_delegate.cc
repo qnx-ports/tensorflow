@@ -43,6 +43,7 @@ limitations under the License.
 #include "tensorflow/lite/core/c/builtin_op_data.h"
 #include "tensorflow/lite/core/c/common.h"
 #include "tensorflow/lite/core/subgraph.h"
+#include "tensorflow/lite/delegates/xnnpack/file_util.h"
 #include "tensorflow/lite/delegates/xnnpack/flexbuffers_util.h"
 #include "tensorflow/lite/delegates/xnnpack/quantization_util.h"
 #include "tensorflow/lite/delegates/xnnpack/weight_cache.h"
@@ -56,13 +57,6 @@ limitations under the License.
 #include "tensorflow/lite/minimal_logging.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/tools/optimize/reduced_precision_support.h"
-
-// These includes are below the non-system includes because the macro may be
-// defined in lite/delegates/xnnpack/weight_cache.h.
-#if TFLITE_XNNPACK_ENABLE_IN_MEMORY_WEIGHT_CACHE
-#include <sys/syscall.h>
-#include <unistd.h>
-#endif
 
 struct TfLiteXNNPackDelegateWeightsCache;
 
@@ -1171,13 +1165,11 @@ class Subgraph {
                        bool enable_subgraph_reshaping, Delegate* delegate) {
     std::lock_guard<std::mutex> lock(delegate->workspace_mutex_);
 
-    // The weights cache needs to be finalized only once. Prepare will be called
-    // for each partition after all the partitions have been created (therefore
-    // all the weights are known and have been packed).
-    if (delegate->weight_cache_provider_.IsActive()) {
-      if (!delegate->weight_cache_provider_.Finalize()) {
+    if (delegate->weight_cache_provider_.IsActive() &&
+        delegate->weight_cache_provider_.CanContinueBuild()) {
+      if (!delegate->weight_cache_provider_.ContinueBuild()) {
         TF_LITE_KERNEL_LOG(context,
-                           "XNNPack delegate failed to finalize cache.");
+                           "XNNPack delegate failed to start cache update.");
         return kTfLiteError;
       }
     }
@@ -1238,6 +1230,15 @@ class Subgraph {
   TfLiteStatus Invoke(TfLiteContext* context, bool enable_subgraph_reshaping,
                       Delegate* delegate) {
     std::lock_guard<std::mutex> lock(delegate->workspace_mutex_);
+
+    if (delegate->weight_cache_provider_.IsActive()) {
+      if (!delegate->weight_cache_provider_.Finalize()) {
+        TF_LITE_KERNEL_LOG(context,
+                           "XNNPack delegate failed to finalize cache.");
+        return kTfLiteError;
+      }
+    }
+
     bool any_pointers_changed = false;
     for (std::pair<int, void*> io_info : externals_) {
       const TfLiteTensor& tensor = context->tensors[io_info.first];
@@ -8104,15 +8105,7 @@ void TfLiteXNNPackDelegateWeightsCacheDelete(
 }
 
 bool TfLiteXNNPackDelegateCanUseInMemoryWeightCacheProvider() {
-#if TFLITE_XNNPACK_ENABLE_IN_MEMORY_WEIGHT_CACHE
-  // Test if the syscall memfd_create is available.
-  const int test_fd = syscall(SYS_memfd_create, "test fd", 0);
-  if (test_fd != -1) {
-    close(test_fd);
-    return true;
-  }
-#endif
-  return false;
+  return tflite::xnnpack::InMemoryFileDescriptorAvailable();
 }
 
 const char* TfLiteXNNPackDelegateInMemoryFilePath() {
@@ -8144,6 +8137,11 @@ TfLiteXNNPackDelegateOptions TfLiteXNNPackDelegateOptionsDefault() {
   options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_QU8;
   options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_DYNAMIC_FULLY_CONNECTED;
 #endif  // XNNPACK_DELEGATE_TEST_MODE
+
+  options.weight_cache_file_path =
+      TfLiteXNNPackDelegateCanUseInMemoryWeightCacheProvider()
+          ? tflite::xnnpack::kInMemoryCachePath
+          : nullptr;
 
   return options;
 }
