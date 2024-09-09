@@ -23,7 +23,9 @@ TENSORFLOW_LITE_DIR="${TENSORFLOW_DIR}/tensorflow/lite"
 TENSORFLOW_VERSION=$(grep "_VERSION = " "${TENSORFLOW_DIR}/tensorflow/tools/pip_package/setup.py" | cut -d= -f2 | sed "s/[ '-]//g")
 export PACKAGE_VERSION="${TENSORFLOW_VERSION}${VERSION_SUFFIX}"
 export PROJECT_NAME=${WHEEL_PROJECT_NAME:-tflite_runtime}
-BUILD_DIR="${SCRIPT_DIR}/gen/tflite_pip/${PYTHON}"
+if [ -z "${BUILD_DIR}" ]; then
+  BUILD_DIR="${SCRIPT_DIR}/gen/tflite_pip/${PYTHON}"
+fi
 TENSORFLOW_TARGET=${TENSORFLOW_TARGET:-$1}
 if [ "${TENSORFLOW_TARGET}" = "rpi" ]; then
   export TENSORFLOW_TARGET="armhf"
@@ -62,69 +64,76 @@ cp "${TENSORFLOW_LITE_DIR}/python/interpreter.py" \
 echo "__version__ = '${PACKAGE_VERSION}'" >> "${BUILD_DIR}/tflite_runtime/__init__.py"
 echo "__git_version__ = '$(git -C "${TENSORFLOW_DIR}" describe)'" >> "${BUILD_DIR}/tflite_runtime/__init__.py"
 
-# Build python interpreter_wrapper.
-mkdir -p "${BUILD_DIR}/cmake_build"
-cd "${BUILD_DIR}/cmake_build"
+if [ -z "${CMAKE_BUILD_DIR}" ]; then
+  CMAKE_BUILD_DIR=${BUILD_DIR}/cmake_build
+  # Build python interpreter_wrapper.
+  mkdir -p "${CMAKE_BUILD_DIR}"
+  cd "${CMAKE_BUILD_DIR}"
 
-echo "Building for ${TENSORFLOW_TARGET}"
-case "${TENSORFLOW_TARGET}" in
-  armhf)
-    eval $(${TENSORFLOW_LITE_DIR}/tools/cmake/download_toolchains.sh "${TENSORFLOW_TARGET}")
-    ARMCC_FLAGS="${ARMCC_FLAGS} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"
-    cmake \
-      -DCMAKE_C_COMPILER=${ARMCC_PREFIX}gcc \
-      -DCMAKE_CXX_COMPILER=${ARMCC_PREFIX}g++ \
-      -DCMAKE_C_FLAGS="${ARMCC_FLAGS}" \
-      -DCMAKE_CXX_FLAGS="${ARMCC_FLAGS}" \
-      -DCMAKE_SYSTEM_NAME=Linux \
-      -DCMAKE_SYSTEM_PROCESSOR=armv7 \
-      -DTFLITE_ENABLE_XNNPACK=OFF \
-      "${TENSORFLOW_LITE_DIR}"
-    ;;
-  rpi0)
-    eval $(${TENSORFLOW_LITE_DIR}/tools/cmake/download_toolchains.sh "${TENSORFLOW_TARGET}")
-    ARMCC_FLAGS="${ARMCC_FLAGS} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"
-    cmake \
-      -DCMAKE_C_COMPILER=${ARMCC_PREFIX}gcc \
-      -DCMAKE_CXX_COMPILER=${ARMCC_PREFIX}g++ \
-      -DCMAKE_C_FLAGS="${ARMCC_FLAGS}" \
-      -DCMAKE_CXX_FLAGS="${ARMCC_FLAGS}" \
-      -DCMAKE_SYSTEM_NAME=Linux \
-      -DCMAKE_SYSTEM_PROCESSOR=armv6 \
-      -DTFLITE_ENABLE_XNNPACK=OFF \
-      "${TENSORFLOW_LITE_DIR}"
-    ;;
-  aarch64)
-    eval $(${TENSORFLOW_LITE_DIR}/tools/cmake/download_toolchains.sh "${TENSORFLOW_TARGET}")
-    ARMCC_FLAGS="${ARMCC_FLAGS} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"
-    cmake \
-      -DCMAKE_C_COMPILER=${ARMCC_PREFIX}gcc \
-      -DCMAKE_CXX_COMPILER=${ARMCC_PREFIX}g++ \
-      -DCMAKE_C_FLAGS="${ARMCC_FLAGS}" \
-      -DCMAKE_CXX_FLAGS="${ARMCC_FLAGS}" \
-      -DCMAKE_SYSTEM_NAME=Linux \
-      -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-      -DXNNPACK_ENABLE_ARM_I8MM=OFF \
-      "${TENSORFLOW_LITE_DIR}"
-    ;;
-  native)
-    BUILD_FLAGS=${BUILD_FLAGS:-"-march=native -I${PYTHON_INCLUDE} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"}
-    cmake \
-      -DCMAKE_C_FLAGS="${BUILD_FLAGS}" \
-      -DCMAKE_CXX_FLAGS="${BUILD_FLAGS}" \
-      "${TENSORFLOW_LITE_DIR}"
-    ;;
-  *)
-    BUILD_FLAGS=${BUILD_FLAGS:-"-I${PYTHON_INCLUDE} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"}
-    cmake \
-      -DCMAKE_C_FLAGS="${BUILD_FLAGS}" \
-      -DCMAKE_CXX_FLAGS="${BUILD_FLAGS}" \
-      "${TENSORFLOW_LITE_DIR}"
-    ;;
-esac
+  echo "Building for ${TENSORFLOW_TARGET}"
+  case "${TENSORFLOW_TARGET}" in
+    armhf)
+      eval $(${TENSORFLOW_LITE_DIR}/tools/cmake/download_toolchains.sh "${TENSORFLOW_TARGET}")
+      ARMCC_FLAGS="${ARMCC_FLAGS} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"
+      cmake \
+        -DCMAKE_C_COMPILER=${ARMCC_PREFIX}gcc \
+        -DCMAKE_CXX_COMPILER=${ARMCC_PREFIX}g++ \
+        -DCMAKE_C_FLAGS="${ARMCC_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="${ARMCC_FLAGS}" \
+        -DCMAKE_SYSTEM_NAME=Linux \
+        -DCMAKE_SYSTEM_PROCESSOR=armv7 \
+        -DTFLITE_ENABLE_XNNPACK=OFF \
+        "${TENSORFLOW_LITE_DIR}"
+      ;;
+    rpi0)
+      eval $(${TENSORFLOW_LITE_DIR}/tools/cmake/download_toolchains.sh "${TENSORFLOW_TARGET}")
+      ARMCC_FLAGS="${ARMCC_FLAGS} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"
+      cmake \
+        -DCMAKE_C_COMPILER=${ARMCC_PREFIX}gcc \
+        -DCMAKE_CXX_COMPILER=${ARMCC_PREFIX}g++ \
+        -DCMAKE_C_FLAGS="${ARMCC_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="${ARMCC_FLAGS}" \
+        -DCMAKE_SYSTEM_NAME=Linux \
+        -DCMAKE_SYSTEM_PROCESSOR=armv6 \
+        -DTFLITE_ENABLE_XNNPACK=OFF \
+        "${TENSORFLOW_LITE_DIR}"
+      ;;
+    aarch64)
+      eval $(${TENSORFLOW_LITE_DIR}/tools/cmake/download_toolchains.sh "${TENSORFLOW_TARGET}")
+      ARMCC_FLAGS="${ARMCC_FLAGS} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"
+      cmake \
+        -DCMAKE_C_COMPILER=${ARMCC_PREFIX}gcc \
+        -DCMAKE_CXX_COMPILER=${ARMCC_PREFIX}g++ \
+        -DCMAKE_C_FLAGS="${ARMCC_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="${ARMCC_FLAGS}" \
+        -DCMAKE_SYSTEM_NAME=Linux \
+        -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+        -DXNNPACK_ENABLE_ARM_I8MM=OFF \
+        "${TENSORFLOW_LITE_DIR}"
+      ;;
+    nto)
+      echo "ERROR: QNX only supports building with cmake prior to calling the script and setting CMAKE_BUILD_DIR=<path-to-build-dir>."
+      exit 1
+      ;;
+    native)
+      BUILD_FLAGS=${BUILD_FLAGS:-"-march=native -I${PYTHON_INCLUDE} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"}
+      cmake \
+        -DCMAKE_C_FLAGS="${BUILD_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="${BUILD_FLAGS}" \
+        "${TENSORFLOW_LITE_DIR}"
+      ;;
+    *)
+      BUILD_FLAGS=${BUILD_FLAGS:-"-I${PYTHON_INCLUDE} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"}
+      cmake \
+        -DCMAKE_C_FLAGS="${BUILD_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="${BUILD_FLAGS}" \
+        "${TENSORFLOW_LITE_DIR}"
+      ;;
+  esac
 
-cmake --build . --verbose -j ${BUILD_NUM_JOBS} -t _pywrap_tensorflow_interpreter_wrapper
-cd "${BUILD_DIR}"
+  cmake --build . --verbose -j ${BUILD_NUM_JOBS} -t _pywrap_tensorflow_interpreter_wrapper
+  cd "${BUILD_DIR}"
+fi
 
 case "${TENSORFLOW_TARGET}" in
   windows)
@@ -135,7 +144,7 @@ case "${TENSORFLOW_TARGET}" in
     ;;
 esac
 
-cp "${BUILD_DIR}/cmake_build/_pywrap_tensorflow_interpreter_wrapper${LIBRARY_EXTENSION}" \
+cp "${CMAKE_BUILD_DIR}/_pywrap_tensorflow_interpreter_wrapper${LIBRARY_EXTENSION}" \
    "${BUILD_DIR}/tflite_runtime"
 # Bazel generates the wrapper library with r-x permissions for user.
 # At least on Windows, we need write permissions to delete the file.
@@ -157,6 +166,11 @@ case "${TENSORFLOW_TARGET}" in
     ;;
   aarch64)
     WHEEL_PLATFORM_NAME="${WHEEL_PLATFORM_NAME:-linux-aarch64}"
+    ${PYTHON} setup.py bdist --plat-name=${WHEEL_PLATFORM_NAME} \
+                       bdist_wheel --plat-name=${WHEEL_PLATFORM_NAME}
+    ;;
+  nto)
+    WHEEL_PLATFORM_NAME="${WHEEL_PLATFORM_NAME:-nto}"
     ${PYTHON} setup.py bdist --plat-name=${WHEEL_PLATFORM_NAME} \
                        bdist_wheel --plat-name=${WHEEL_PLATFORM_NAME}
     ;;
