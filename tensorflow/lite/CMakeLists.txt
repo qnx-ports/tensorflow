@@ -108,12 +108,11 @@ if(${CMAKE_CROSSCOMPILING})
     message(FATAL_ERROR "Host 'protoc' compiler has not been found in the following locations: ${PROTOC_PATHS}")
   else()
     message(STATUS "Pre-built 'protoc' compiler for cross-compilation purposes found: ${PROTOC_BIN}")
+    set(protobuf_BUILD_PROTOC_BINARIES OFF)
   endif()
 else()
   set(FLATBUFFERS_FLATC_EXECUTABLE "${CMAKE_BINARY_DIR}/flatbuffers-flatc/bin/flatc")
   set(FLATC_TARGET "flatbuffers-flatc")
-
-  set(protobuf_BUILD_PROTOC_BINARIES OFF)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
