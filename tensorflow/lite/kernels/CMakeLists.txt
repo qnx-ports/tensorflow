@@ -34,6 +34,7 @@ if(${CMAKE_CROSSCOMPILING})
       ${TFLITE_HOST_TOOLS_DIR}
       ${TFLITE_HOST_TOOLS_DIR}/bin
       ${TFLITE_HOST_TOOLS_DIR}/flatbuffers-flatc/bin
+      ${TFLITE_HOST_TOOLS_DIR}/flatbuffers-build/flatbuffers-flatc/bin
       )
   find_program(FLATC_BIN flatc PATHS ${FLATC_PATHS} NO_DEFAULT_PATH)
   if(${FLATC_BIN} STREQUAL "FLATC_BIN-NOTFOUND")
@@ -42,6 +43,7 @@ if(${CMAKE_CROSSCOMPILING})
   else()
     message(STATUS "Pre-built 'flatc' compiler for cross-compilation purposes found: ${FLATC_BIN}")
     set(FLATBUFFERS_FLATC_EXECUTABLE ${FLATC_BIN})
+    set(FLATBUFFERS_BUILD_FLATC OFF)
   endif()
 else()
   set(FLATBUFFERS_FLATC_EXECUTABLE ${CMAKE_BINARY_DIR}/flatbuffers-flatc/bin/flatc)

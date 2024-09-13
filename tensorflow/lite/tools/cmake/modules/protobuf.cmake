@@ -42,4 +42,8 @@ set(Protobuf_LIBRARIES protobuf::libprotobuf CACHE INTERNAL "")
 
 add_subdirectory(${protobuf_SOURCE_DIR} ${protobuf_BINARY_DIR})
 
-set(Protobuf_PROTOC_EXECUTABLE protoc CACHE INTERNAL "")
+if(NOT DEFINED PROTOC_BIN)
+  set(Protobuf_PROTOC_EXECUTABLE "${protobuf_BINARY_DIR}/protoc" CACHE INTERNAL "")
+else()
+  set(Protobuf_PROTOC_EXECUTABLE "${PROTOC_BIN}" CACHE INTERNAL "")
+endif()

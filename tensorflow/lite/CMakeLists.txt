@@ -88,6 +88,7 @@ if(${CMAKE_CROSSCOMPILING})
       ${TFLITE_HOST_TOOLS_DIR}
       ${TFLITE_HOST_TOOLS_DIR}/bin
       ${TFLITE_HOST_TOOLS_DIR}/flatbuffers-flatc/bin
+      ${TFLITE_HOST_TOOLS_DIR}/flatbuffers-build/flatbuffers-flatc/bin
       )
   find_program(FLATC_BIN flatc PATHS ${FLATC_PATHS})
   if(${FLATC_BIN} STREQUAL "FLATC_BIN-NOTFOUND")
@@ -95,6 +96,18 @@ if(${CMAKE_CROSSCOMPILING})
   else()
     message(STATUS "Pre-built 'flatc' compiler for cross-compilation purposes found: ${FLATC_BIN}")
     set(FLATBUFFERS_FLATC_EXECUTABLE "${FLATC_BIN}")
+  endif()
+
+  # Setup the host Protobuf compiler.
+  set(PROTOC_PATHS
+      ${TFLITE_HOST_TOOLS_DIR}
+      ${TFLITE_HOST_TOOLS_DIR}/protobuf-build
+      ${TFLITE_HOST_TOOLS_DIR}/protobuf-build/protobuf-build)
+  find_program(PROTOC_BIN protoc PATHS ${PROTOC_PATHS})
+  if(${PROTOC_BIN} STREQUAL "PROTOC_BIN-NOTFOUND")
+    message(FATAL_ERROR "Host 'protoc' compiler has not been found in the following locations: ${PROTOC_PATHS}")
+  else()
+    message(STATUS "Pre-built 'protoc' compiler for cross-compilation purposes found: ${PROTOC_BIN}")
   endif()
 else()
   set(FLATBUFFERS_FLATC_EXECUTABLE "${CMAKE_BINARY_DIR}/flatbuffers-flatc/bin/flatc")

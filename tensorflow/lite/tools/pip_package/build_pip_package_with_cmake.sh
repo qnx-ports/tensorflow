@@ -31,10 +31,12 @@ BUILD_NUM_JOBS="${BUILD_NUM_JOBS:-4}"
 if [ "${TENSORFLOW_TARGET}" = "rpi" ]; then
   export TENSORFLOW_TARGET="armhf"
 fi
-PYTHON_INCLUDE=$(${PYTHON} -c "from sysconfig import get_paths as gp; print(gp()['include'])")
-PYBIND11_INCLUDE=$(${PYTHON} -c "import pybind11; print (pybind11.get_include())")
-NUMPY_INCLUDE=$(${PYTHON} -c "import numpy; print (numpy.get_include())")
-export CROSSTOOL_PYTHON_INCLUDE_PATH=${PYTHON_INCLUDE}
+if [ -z "${CMAKE_BUILD_DIR}" ]; then
+  PYTHON_INCLUDE=$(${PYTHON} -c "from sysconfig import get_paths as gp; print(gp()['include'])")
+  PYBIND11_INCLUDE=$(${PYTHON} -c "import pybind11; print (pybind11.get_include())")
+  NUMPY_INCLUDE=$(${PYTHON} -c "import numpy; print (numpy.get_include())")
+  export CROSSTOOL_PYTHON_INCLUDE_PATH=${PYTHON_INCLUDE}
+fi
 
 # Fix container image for cross build.
 if [ ! -z "${CI_BUILD_HOME}" ] && [ `pwd` = "/workspace" ]; then
