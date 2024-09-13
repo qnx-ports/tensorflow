@@ -112,6 +112,8 @@ if(${CMAKE_CROSSCOMPILING})
 else()
   set(FLATBUFFERS_FLATC_EXECUTABLE "${CMAKE_BINARY_DIR}/flatbuffers-flatc/bin/flatc")
   set(FLATC_TARGET "flatbuffers-flatc")
+
+  set(protobuf_BUILD_PROTOC_BINARIES OFF)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -201,9 +203,6 @@ if(TFLITE_ENABLE_XNNPACK)
     find_library(PTHREADPOOL_LIB pthreadpool REQUIRED)
   elseif(NOT DEFINED PTHREADPOOL_SOURCE_DIR)
       message(STATUS "Downloading pthreadpool to ${CMAKE_BINARY_DIR}/pthreadpool-source (define SYSTEM_PTHREADPOOL or PTHREADPOOL_SOURCE_DIR to avoid it)")
-      if(QNX)
-        set(PATCH_CMD "patch" "<" "${QNX_PATCH_DIR}/pthreadpool.patch")
-      endif()
       configure_file(cmake/DownloadPThreadPool.cmake "${CMAKE_BINARY_DIR}/pthreadpool-download/CMakeLists.txt")
       execute_process(COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" .
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/pthreadpool-download")
