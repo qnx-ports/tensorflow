@@ -27,4 +27,5 @@ ExternalProject_Add(pthreadpool
   BUILD_COMMAND ""
   INSTALL_COMMAND ""
   TEST_COMMAND ""
+  PATCH_COMMAND ${PTHREADPOOL_PATCH_CMD}
 )

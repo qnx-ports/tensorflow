@@ -33,6 +33,7 @@ if(NOT ruy_POPULATED)
 endif()
 
 set(RUY_SOURCE_DIR "${ruy_SOURCE_DIR}" CACHE PATH "RUY source directory")
+set(RUY_ENABLE_INSTALL TFLITE_ENABLE_INSTALL)
 
 add_subdirectory(
   "${ruy_SOURCE_DIR}"
