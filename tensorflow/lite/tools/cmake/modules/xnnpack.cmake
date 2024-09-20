@@ -27,6 +27,7 @@ OverridableFetchContent_Declare(
   GIT_PROGRESS TRUE
   PREFIX "${CMAKE_BINARY_DIR}"
   SOURCE_DIR "${CMAKE_BINARY_DIR}/xnnpack"
+  PATCH_COMMAND ${XNNPACK_PATCH_CMD}
 )
 OverridableFetchContent_GetProperties(xnnpack)
 if(NOT xnnpack_POPULATED)

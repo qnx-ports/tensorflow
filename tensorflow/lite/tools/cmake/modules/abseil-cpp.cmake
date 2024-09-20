@@ -37,7 +37,6 @@ endif()
 
 set(ABSL_USE_GOOGLETEST_HEAD OFF CACHE BOOL "Disable googletest")
 set(ABSL_RUN_TESTS OFF CACHE BOOL "Disable build of ABSL tests")
-set(ABSL_ENABLE_INSTALL TFLITE_ENABLE_INSTALL)
 add_subdirectory(
   "${abseil-cpp_SOURCE_DIR}"
   "${abseil-cpp_BINARY_DIR}"
