@@ -19,10 +19,6 @@ endif()
 
 include(OverridableFetchContent)
 
-if(QNX)
-  set(PATCH_CMD git reset --hard && git apply "${QNX_PATCH_DIR}/eigen.patch")
-endif()
-
 OverridableFetchContent_Declare(
   eigen
   GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
@@ -37,7 +33,7 @@ OverridableFetchContent_Declare(
   PREFIX "${CMAKE_BINARY_DIR}"
   SOURCE_DIR "${CMAKE_BINARY_DIR}/eigen"
   LICENSE_FILE "COPYING.MPL2"
-  PATCH_COMMAND ${PATCH_CMD}
+  PATCH_COMMAND ${EIGEN_PATCH_CMD}
 )
 OverridableFetchContent_GetProperties(eigen)
 if(NOT eigen_POPULATED)
