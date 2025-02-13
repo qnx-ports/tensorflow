@@ -21,6 +21,7 @@ add_mlir_dialect_library(StablehloExtensionPasses
   chlo_recompose_ops.cpp
   stablehlo_canonicalize_dynamism.cpp
   stablehlo_refine_shapes.cpp
+  sdy_refine_shapes.cpp
 
   DEPENDS
   StablehloExtensionPassesIncGen
@@ -35,6 +36,7 @@ add_mlir_dialect_library(StablehloExtensionPasses
   StablehloExtensionOps
   StablehloBase
   StablehloOps
+  StablehloOptimizationPasses
   StablehloPasses
   StablehloTypeInference
 )

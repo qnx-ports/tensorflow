@@ -38,12 +38,12 @@ limitations under the License.
 #include "third_party/gpus/cuda/include/library_types.h"
 #include "xla/primitive_util.h"
 #include "xla/status_macros.h"
+#include "xla/stream_executor/activate_context.h"
 #include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/cuda/cuda_blas.h"
 #include "xla/stream_executor/cuda/cuda_blas_utils.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/event_based_timer.h"
-#include "xla/stream_executor/gpu/gpu_activation.h"
 #include "xla/stream_executor/gpu/gpu_blas_lt.h"
 #include "xla/stream_executor/gpu/gpu_helpers.h"
 #include "xla/stream_executor/gpu/gpu_stream.h"
@@ -256,7 +256,8 @@ auto BlasLt::MatmulPlan::GetAlgorithms(size_t max_algorithm_count,
         cu_preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
         max_workspace_size));
 
-    gpu::ScopedActivateExecutorContext sac{blas_lt_ref_.parent_};
+    std::unique_ptr<ActivateContext> activation =
+        blas_lt_ref_.parent_->Activate();
 
     int found_algorithm_count = 0;
     SE_CUBLAS_RETURN_IF_ERROR(cublasLtMatmulAlgoGetHeuristic(
@@ -308,24 +309,6 @@ auto BlasLt::GetMatmulPlan(const gpu::GemmConfig& cfg,
   bool must_swap_operands =
       MakeOutputColumnMajor(lhs_layout, rhs_layout, output_layout, &c_layout);
 
-  // Do not transpose either input. Note the cuBLASLt documentation somewhat
-  // incorrectly claims "A must be transposed and B non-transposed" when A and B
-  // are FP8 (https://docs.nvidia.com/cuda/cublas/#cublasltmatmul). In reality,
-  // this is only true if A and B are column-major. If A is row-major, A must
-  // *not* be transposed, and if B is row-major, B must be transposed. We never
-  // transpose A or B, and expect the caller to ensure A is row-major and B is
-  // column when A and B are FP8.
-  auto trans_a = lhs_layout.transpose, trans_b = rhs_layout.transpose;
-
-  if (xla::primitive_util::IsF8Type(lhs_layout.dtype) &&
-      lhs_layout.order == gpu::MatrixLayout::Order::kColumnMajor) {
-    return xla::Internal("The F8 LHS must be column-major");
-  }
-  if (xla::primitive_util::IsF8Type(rhs_layout.dtype) &&
-      rhs_layout.order == gpu::MatrixLayout::Order::kRowMajor) {
-    return xla::Internal("The F8 RHS must be row-major");
-  }
-
   TF_ASSIGN_OR_RETURN(auto output_dtype,
                       gpu::AsBlasDataType(output_layout.dtype));
 
@@ -343,6 +326,7 @@ auto BlasLt::GetMatmulPlan(const gpu::GemmConfig& cfg,
   bool enable_fast_accum =
       IsFastAccumEnabled(cfg.precision_algorithm, lhs_layout.dtype,
                          rhs_layout.dtype, cfg.compute_precision);
+  auto trans_a = lhs_layout.transpose, trans_b = rhs_layout.transpose;
   TF_ASSIGN_OR_RETURN(
       auto op_desc,
       MatmulDesc::Create(*compute_type,
@@ -449,15 +433,12 @@ absl::Status BlasLt::MatmulPlan::DoMatmul(
                                  CUBLASLT_MATMUL_DESC_B_SCALE_POINTER,
                                  b_scale.opaque()));
     }
-    auto isF8Input = [](const auto& desc) {
-      return desc.type() == CUDA_R_8F_E4M3 || desc.type() == CUDA_R_8F_E5M2;
-    };
-    if (c_scale != nullptr && isF8Input(c_desc_)) {
+    if (c_scale != nullptr) {
       TF_RETURN_IF_ERROR(SetAttr(op_desc_.get(),
                                  CUBLASLT_MATMUL_DESC_C_SCALE_POINTER,
                                  c_scale.opaque()));
     }
-    if (d_scale != nullptr && isF8Input(d_desc_)) {
+    if (d_scale != nullptr) {
       TF_RETURN_IF_ERROR(SetAttr(op_desc_.get(),
                                  CUBLASLT_MATMUL_DESC_D_SCALE_POINTER,
                                  d_scale.opaque()));
@@ -505,7 +486,8 @@ absl::Status BlasLt::MatmulPlan::DoMatmul(
 #endif
     }
 
-    gpu::ScopedActivateExecutorContext sac{blas_lt_ref_.parent_};
+    std::unique_ptr<ActivateContext> activation =
+        blas_lt_ref_.parent_->Activate();
 
     if (palgo != nullptr) {
       SE_CUBLAS_RETURN_IF_ERROR(cublasLtMatmul(

@@ -16,12 +16,14 @@ limitations under the License.
 #include "xla/backends/interpreter/platform.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "xla/backends/interpreter/executor.h"
+#include "xla/stream_executor/device_description.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/initialize.h"
 #include "xla/stream_executor/platform_manager.h"

@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "xla/python/refine_polymorphic_shapes.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -49,8 +50,8 @@ limitations under the License.
 #include "stablehlo/dialect/StablehloOps.h"
 #include "xla/mlir/utils/error_util.h"
 #include "xla/mlir_hlo/stablehlo_ext/transforms/passes.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/logging.h"
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/logging.h"
 
 namespace xla {
 
@@ -217,13 +218,13 @@ struct CheckShapeAssertionsPass
       return (idx < nrErrorMessageInputs ? errorMessageInputs[idx] : -1);
     };
     return llvm::formatv(
-        errorMessageFormat, errInput(0), errInput(1), errInput(2), errInput(3),
-        errInput(4), errInput(5), errInput(6), errInput(7), errInput(8),
-        errInput(9), errInput(10), errInput(11), errInput(12), errInput(13),
-        errInput(14), errInput(15), errInput(16), errInput(17), errInput(18),
-        errInput(19), errInput(20), errInput(21), errInput(22), errInput(23),
-        errInput(24), errInput(25), errInput(26), errInput(27), errInput(28),
-        errInput(29), errInput(30), errInput(31));
+        false, errorMessageFormat, errInput(0), errInput(1), errInput(2),
+        errInput(3), errInput(4), errInput(5), errInput(6), errInput(7),
+        errInput(8), errInput(9), errInput(10), errInput(11), errInput(12),
+        errInput(13), errInput(14), errInput(15), errInput(16), errInput(17),
+        errInput(18), errInput(19), errInput(20), errInput(21), errInput(22),
+        errInput(23), errInput(24), errInput(25), errInput(26), errInput(27),
+        errInput(28), errInput(29), errInput(30), errInput(31));
   }
 
   mlir::StringRef getArgument() const override {

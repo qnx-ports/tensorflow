@@ -38,7 +38,7 @@ cc_binary(
         ":gen_proto_text_functions_lib",
         "//tensorflow/core:lib_proto_parsing",
         "@com_google_protobuf//:protobuf",
-        "@local_tsl//tsl/platform:protobuf_compiler",
+        "@local_xla//xla/tsl/platform:protobuf_compiler",
     ] + if_ios(["//tensorflow/core/platform:logging"]),
 )
 
@@ -65,6 +65,7 @@ cc_library(
     }),
     deps = [
         "//tensorflow/core:lib_proto_parsing",
+        "@com_google_absl//absl/strings:string_view",
     ] + if_ios(["//tensorflow/core/platform:logging"]),
 )
 

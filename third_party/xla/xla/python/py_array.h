@@ -22,7 +22,6 @@ limitations under the License.
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,6 +29,7 @@ limitations under the License.
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/types/span.h"
 #include "llvm/Support/Casting.h"
 #include "nanobind/nanobind.h"
@@ -38,7 +38,7 @@ limitations under the License.
 #include "xla/pjrt/pjrt_future.h"
 #include "xla/pjrt/pjrt_layout.h"
 #include "xla/python/ifrt/array.h"
-#include "xla/python/ifrt/device.h"
+#include "xla/python/ifrt/device_list.h"
 #include "xla/python/ifrt/future.h"
 #include "xla/python/nb_class_ptr.h"
 #include "xla/python/nb_numpy.h"
@@ -70,8 +70,19 @@ class PyHostValue {
       std::optional<Shape>& dynamic_shape_holder, ifrt::Array* ifrt_array);
 
  private:
+  absl::Status CopyStringArrayToHostAsync(
+      std::optional<Shape>& dynamic_shape_holder, ifrt::Array* ifrt_array);
+
+  absl::Status ConvertStringArrayContentsToNumpyArray(ifrt::Array* ifrt_array);
+
   ifrt::Future<> ready_;
   nb_numpy_ndarray value_;
+
+  // Optional field, only used for arrays of type kString. This vector of cords
+  // serves as input buffer for the CopyToHostBuffer call. It holds these
+  // contents until it is lazily converted it to a numpy array when the user
+  // calls `AsNumPyArray`.
+  std::shared_ptr<std::vector<absl::Cord>> string_array_contents_;
 };
 
 // Private to PyArray, but you cannot forward declare member classes.
@@ -114,6 +125,8 @@ struct PyArray_Storage {
   // duplicate PjRtBuffers in this list.
   PyArray_Storage* next;
   PyArray_Storage* prev;
+
+  uint8_t thread_id_bucket;
 };
 
 // The C++ implementation of jax.Array. A few key methods and data members are
@@ -170,7 +183,7 @@ class PyArray : public nanobind::object {
 
   const nanobind::object& sharding() const { return GetStorage().sharding; }
 
-  absl::StatusOr<std::unique_ptr<PjRtLayout>> layout() {
+  absl::StatusOr<std::shared_ptr<const PjRtLayout>> layout() {
     return ifrt_array()->layout();
   }
 
@@ -250,7 +263,7 @@ class PyArray : public nanobind::object {
     if (ifrt_array_ptr == nullptr) {
       return 0;
     }
-    return ifrt_array_ptr->sharding().devices().size();
+    return ifrt_array_ptr->sharding().devices()->size();
   }
 
   static nanobind::handle type() {
@@ -280,8 +293,9 @@ class PyArray : public nanobind::object {
 
   static absl::StatusOr<std::vector<PyArray>> BatchedCopyToDeviceWithSharding(
       absl::Span<const PyArray> py_arrays,
-      absl::Span<const ifrt::DeviceList> dst_device_lists,
-      absl::Span<const nanobind::object> dst_shardings);
+      absl::Span<const tsl::RCReference<ifrt::DeviceList>> dst_device_lists,
+      absl::Span<const nanobind::object> dst_shardings,
+      absl::Span<const ifrt::ArrayCopySemantics> array_copy_semantics);
 
   static absl::StatusOr<PyArray> BatchedDevicePut(
       nanobind::object aval, nanobind::object sharding,
@@ -290,13 +304,19 @@ class PyArray : public nanobind::object {
       bool force_copy, PjRtClient::HostBufferSemantics host_buffer_semantics,
       bool jax_enable_x64);
 
+  static absl::StatusOr<PyArray> ReorderShards(
+      PyArray x, nanobind::object dst_sharding,
+      ifrt::ArrayCopySemantics array_copy_semantics);
+
   static absl::Status BatchedBlockUntilReady(
       std::vector<nanobind::object> objs);
 
  private:
-  absl::StatusOr<PyArray> AssertUnsharded(std::string_view api);
+  absl::StatusOr<PyArray> AssertUnsharded(absl::string_view api);
 
-  void CheckAndRearrange();
+  nanobind::object CheckAndRearrange(absl::Span<const PyArray> py_arrays,
+                                     nanobind::object sharding,
+                                     nanobind::object aval);
 
   void SetIfrtArray(tsl::RCReference<ifrt::Array> ifrt_array);
 

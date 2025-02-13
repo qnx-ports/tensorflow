@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/lite/core/signature_runner.h"
 
+#include <cstdint>
 #include <vector>
 
 #include "tensorflow/lite/c/common.h"
@@ -29,11 +30,13 @@ SignatureRunner::SignatureRunner(const internal::SignatureDef* signature_def,
                                  Subgraph* subgraph)
     : signature_def_(signature_def), subgraph_(subgraph) {
   // Collects the list of input and output tensor names.
-  for (const auto& it : signature_def_->inputs) {
-    input_names_.push_back(it.first.c_str());
+  input_names_.reserve(signature_def_->input_names.size());
+  for (const auto& it : signature_def_->input_names) {
+    input_names_.push_back(it.c_str());
   }
-  for (const auto& it : signature_def_->outputs) {
-    output_names_.push_back(it.first.c_str());
+  output_names_.reserve(signature_def_->output_names.size());
+  for (const auto& it : signature_def_->output_names) {
+    output_names_.push_back(it.c_str());
   }
 }
 
@@ -59,15 +62,18 @@ const TfLiteTensor* SignatureRunner::output_tensor(
 TfLiteStatus SignatureRunner::SetInputBufferHandle(
     const char* input_name, TfLiteBufferHandle buffer_handle,
     TfLiteDelegate* delegate, bool release_existing_buffer_handle) {
-  return Subgraph::SetBufferHandleImpl(
-      subgraph_->context(), input_tensor(input_name), buffer_handle, delegate,
-      release_existing_buffer_handle);
+  const auto& it = signature_def_->inputs.find(input_name);
+  if (it == signature_def_->inputs.end()) {
+    subgraph_->ReportError("Input name %s was not found", input_name);
+    return kTfLiteError;
+  }
+  return subgraph_->SetBufferHandle(it->second, buffer_handle, delegate,
+                                    release_existing_buffer_handle);
 }
 
 TfLiteStatus SignatureRunner::SetOutputBufferHandle(
     const char* output_name, TfLiteBufferHandle buffer_handle,
     TfLiteDelegate* delegate, bool release_existing_buffer_handle) {
-  // Can't use output_tensor() here because it returns a const TfLiteTensor*.
   const auto& it = signature_def_->outputs.find(output_name);
   if (it == signature_def_->outputs.end()) {
     subgraph_->ReportError("Output name %s was not found", output_name);
