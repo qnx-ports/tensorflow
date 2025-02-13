@@ -33,7 +33,6 @@ OverridableFetchContent_Declare(
   PREFIX "${CMAKE_BINARY_DIR}"
   SOURCE_DIR "${CMAKE_BINARY_DIR}/eigen"
   LICENSE_FILE "COPYING.MPL2"
-  PATCH_COMMAND ${EIGEN_PATCH_CMD}
 )
 OverridableFetchContent_GetProperties(eigen)
 if(NOT eigen_POPULATED)
