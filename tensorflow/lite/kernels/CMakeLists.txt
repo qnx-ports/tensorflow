@@ -165,7 +165,7 @@ macro(add_kernel_test TEST_SRC TEST_LIB)
     WORKING_DIRECTORY ${TENSORFLOW_SOURCE_DIR}
   )
 
-  if(QNX)
+  if(CMAKE_CROSSCOMPILING AND QNX)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME}
       DESTINATION ${CMAKE_INSTALL_BINDIR}/kernel_tests
     )
@@ -350,7 +350,7 @@ if(${CMAKE_CROSSCOMPILING})
 endif()
 
 
-if(QNX)
+if(CMAKE_CROSSCOMPILING AND QNX)
   install(TARGETS tensorflow-lite-test-external-main tensorflow-lite-test-base
     DESTINATION ${CMAKE_INSTALL_BINDIR}/kernel_tests_libs
   )
